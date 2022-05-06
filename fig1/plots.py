@@ -1,227 +1,130 @@
-import sys
-sys.path.append("../utils/")
 import numpy as np
-from task import generate_batch
-from single_unit_analysis import get_FR
 
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
-from matplotlib.colors import LinearSegmentedColormap, colorConverter
-from plot_utils import ring_colormap
+''' general figure params '''
+# font sizes
+title_size = 10
+axis_label = 9
+tick_label = 7
 
-from scipy.special import softmax
-from scipy import stats
-from scipy.ndimage import gaussian_filter1d
-from sklearn.decomposition import PCA
+# map colors
+c1 = 'xkcd:scarlet'
+c2 = 'k'
 
+def plot_fig1c(d, cell_ID, FR_0, FR_1, FR_0_sem, FR_1_sem, binned_pos):
+    '''
+    From Low et al, 2021
+    Example of remapping for a single session:
+    raster and TC for one unit
+    network-wide similarity and distance to cluster
 
-def plot_rings(model, random_state, num_points, **kwargs):
+    Params:
+    ------
+    d : dict
+        data for the example mouse/session
+    cell_ID : ndaintrray
+        ID number for the example cell.
+    FR_0, FR_1 : ndarray
+        firing rate by position within each map
+        shape (n_pos_bins, n_cells)
+    FR_0_sem, FR_1_sem : ndarray
+        SEM for the firing rate arrays; shape (n_pos_bins, n_cells)
+    binned_pos : ndarray
+        centers of each position bin (cm); shape (n_pos_bins, )
+    '''
 
-    inp_init, inp_remaps, inp_vel, pos_targets, map_targets = \
-        generate_batch(10, random_state, **kwargs)
+    # load relevant data
+    A = d['A'] # behavior
+    B = d['B'] # spikes
+    cells = d['cells'] # cell IDs
+    sim = d['sim'] # trial-trial similarity
+    remap_idx = d['remap_idx'] # remap trial index
+    W = d['kmeans']['W']
 
-    _, _, hidden_states = model(inp_init, inp_vel, inp_remaps)
- 
-    X = hidden_states.detach().numpy()
-    X = X.reshape(-1, X.shape[-1])
-    targ = pos_targets.detach().numpy().ravel()
-    targ = (targ + np.pi) % (2 * np.pi) - np.pi
+    # set indices for each map
+    map0_idx = d['idx'][0, :]
+    map1_idx = d['idx'][1, :]
 
-    pcs = PCA(n_components=3).fit_transform(X)
-    idx = np.random.choice(targ.size, size=num_points, replace=False)
+    # figure parameters
+    gs = gridspec.GridSpec(8, 7, hspace=1.2, wspace=4)
+    f = plt.figure(figsize=(1.6, 1))    
+    LW_MEAN = 0.5
+    LW_SEM = 0.1   
+    CLU_W = 4 
 
-    fig = plt.figure()
-    ax = fig.add_subplot(projection='3d')
-    sc = ax.scatter(
-        *pcs[idx].T, c=targ[idx], cmap=ring_colormap(),
-        lw=0, alpha=1, s=5
-    )
+    # plot raster
+    ax2 = plt.subplot(gs[:-2, :3])
+    sdx_0 = B[map0_idx, np.where(cells==cell_ID)[0][0]].astype(bool)
+    ax2.scatter(A[map0_idx, 0][sdx_0], A[map0_idx, 2][sdx_0],\
+                color=c1, lw=0, s=0.3, alpha=.3)
+    sdx_1 = B[map1_idx, np.where(cells==cell_ID)[0][0]].astype(bool)
+    ax2.scatter(A[map1_idx, 0][sdx_1], A[map1_idx, 2][sdx_1],\
+                color=c2, lw=0, s=0.3, alpha=.2)
+    ax2.set_xlim((0, 400))
+    ylim_ax = [0, np.max(A[:, 2])]
+    ax2.set_ylim(ylim_ax[::-1])
+    ax2.set_yticks([0, 200, 400])
+    ax2.set_ylabel('trial', fontsize=axis_label, labelpad=1)
+    ax2.tick_params(labelbottom=False, which='major',\
+                    labelsize=tick_label, pad=0.5)
+    ax2.set_title('ex. cell', fontsize=title_size, pad=3)
 
-    return fig, ax, sc
-
-
-def plot_contexts(model, random_state, num_points, **kwargs):
-
-    inp_init, inp_remaps, inp_vel, pos_targets, map_targets = \
-        generate_batch(10, random_state, **kwargs)
-
-    _, _, hidden_states = model(inp_init, inp_vel, inp_remaps)
- 
-    X = hidden_states.detach().numpy()
-    X = X.reshape(-1, X.shape[-1])
-    targ = map_targets.detach().numpy().ravel()
-    colors = {
-        0: "k",
-        1: "g",
-        2: "r",
-    }
-
-    pcs = PCA(n_components=3).fit_transform(X)
-    idx = np.random.choice(targ.size, size=num_points, replace=False)
-
-    fig = plt.figure()
-    ax = fig.add_subplot(projection='3d')
-
-    sc = ax.scatter(
-        *pcs[idx].T, c=[colors[t] for t in targ[idx]],
-        lw=0, alpha=1, s=5, 
-    )
-
-    return fig, ax, sc
-
-def plot_init_pos_perf(model, random_state, **kwargs):
-
-    inp_init, inp_remaps, inp_vel, pos_targets, map_targets = \
-        generate_batch(124, random_state, **kwargs)
-
-    pos_outputs, _, _ = model(inp_init, inp_vel, inp_remaps)
-    pos_outputs = pos_outputs.detach().numpy()
-
-    pred = np.arctan2(pos_outputs[0, :, 1], pos_outputs[0, :, 0])
-    targ = pos_targets.detach().numpy()[0, :, 0]
-
-    fig, ax = plt.subplots(1, 1)
-    ax.scatter(pred, targ, lw=0, color="k", s=20)
-    ax.plot([-np.pi, np.pi], [-np.pi, np.pi], color="r")
-
-    fig, ax = plt.subplots(1, 1)
-
-    for (x1, y1), t in zip(pos_outputs[0], targ):
-        x2, y2 = np.cos(t), np.sin(t)
-        plt.plot([x1, x2], [y1, y2], color="k")
-        plt.scatter(x1, y1, color="r", lw=0, s=20)
-        plt.scatter(x2, y2, color="b", lw=0, s=20)
-
-
-def plot_trial(model, random_state, **kwargs):
-
-    inp_init, inp_remaps, inp_vel, pos_targets, map_targets = \
-        generate_batch(1, random_state, **kwargs)
-
-    pos_outputs, map_logits, states = model(inp_init, inp_vel, inp_remaps)
-
-    pos_outputs = pos_outputs.detach().numpy()[:, 0, :]
-    pred = np.arctan2(pos_outputs[:, 1], pos_outputs[:, 0])
-    targ = pos_targets.detach().numpy()[:, 0, :]
-
-    targ = (targ + np.pi) % (2 * np.pi) - np.pi
-
-    fig, axes = plt.subplots(4, 1, gridspec_kw=dict(height_ratios=[2, 2, 1, 1]), sharex=True)
-    axes[0].plot(pred, label="pred")
-    axes[0].plot(targ, label="targ")
-    axes[0].legend(title="position")
-    axes[0].set_ylim(-np.pi - .2, np.pi + .2)
-    axes[0].axhline(-np.pi, color="k", dashes=[2, 2], alpha=.5)
-    axes[0].axhline(np.pi, color="k", dashes=[2, 2], alpha=.5)
-
-    axes[1].plot(inp_vel[:, 0])
-
-    map_logits = map_logits.detach().numpy()[:, 0, :]
-    inp_remaps = inp_remaps.detach().numpy()[:, 0, :]
-    axes[2].plot(softmax(map_logits, axis=1)[:, 0], color="red", label="A")
-    axes[2].plot(softmax(map_logits, axis=1)[:, 1], color="black", label="B")
-    # axes[1].plot(softmax(map_logits, axis=1)[:, 2], color="green", label="C")
-    axes[2].legend(title="context prediction")
-    axes[3].plot(inp_remaps[:, 0], color="red", label="A")
-    axes[3].plot(inp_remaps[:, 1], color="black", label="B")
-    # axes[2].plot(inp_remaps[:, 2], color="green", label="C")
-    axes[3].legend(title="context cues/inputs")
-
-    return fig, axes
-
-
-def plot_tuning_curves(model, random_state, batch_size, **kwargs):
-
-    inp_init, inp_remaps, inp_vel, pos_targets, map_targets = \
-        generate_batch(batch_size, random_state, **kwargs)
-
-    # get unit firing rates from the model
-    # shape: n_steps x n_batch x hidden_size
-    _, _, firing_rates = model(inp_init, inp_vel, inp_remaps)
-
-    ''' reformat the data '''
-    # convert to numpy arrays
-    pos_targets = pos_targets.detach().numpy()
-    map_targets = map_targets.detach().numpy()
-    firing_rates = firing_rates.detach().numpy()
-
-    # flatten everything
-    map_targets = map_targets.reshape(-1)
-    pos_targets = pos_targets.reshape(-1)
-    # there is certainly a tidier way to do this
-    # (need to make sure the dims match so data is not shuffled)
-    for i in range(n_units):
-        if i == 0:
-            firing_rates_flat = firing_rates[:, :, i].reshape(-1)
-        else:
-            firing_rates_flat = np.row_stack((firing_rates_flat, firing_rates[:, :, i].reshape(-1)))
-    firing_rates = firing_rates_flat
-
-    # convert distance travelled to position on circular track (-pi to pi)
-    pos_targets_circ = (pos_targets + np.pi) % (2*np.pi) - np.pi
-
-    # normalize firing rate for each unit
-    for i in range(n_units):
-        fr = firing_rates[i, :]
-        fr -= np.min(fr)
-        fr /= np.max(fr)
-        firing_rates[i, :] = fr
-
-    ''' get tuning curve for each unit in each map '''
-    # filter by map
-    FR_map1 = firing_rates[:, map_targets==0]
-    pos_map1 = pos_targets_circ[map_targets==0]
-    FR_map2 = firing_rates[:, map_targets==1]
-    pos_map2 = pos_targets_circ[map_targets==1]
+    # plot tuning curves with SEM
+    sdx = (np.where(cells==cell_ID)[0][0]).astype(int)
+    ax3 = plt.subplot(gs[-2:, :3])
+    ax3.plot(FR_0[:, sdx], c1, lw=LW_MEAN, alpha=0.9)
+    ax3.fill_between(binned_pos/2,\
+                        FR_0[:, sdx] + FR_0_sem[:, sdx],\
+                        FR_0[:, sdx] - FR_0_sem[:, sdx],\
+                        color=c1, linewidth=LW_SEM, alpha=0.3)
+    ax3.plot(FR_1[:, sdx], color=c2, lw=LW_MEAN, alpha=1)
+    ax3.fill_between(binned_pos/2,\
+                        FR_1[:, sdx] + FR_1_sem[:, sdx],\
+                        FR_1[:, sdx] - FR_1_sem[:, sdx],\
+                        color=c2, linewidth=LW_SEM, alpha=0.4)
     
-    # compute the tuning curves
-    bin_size = (2 * np.pi) / 80
-    tcs_map1, sem_map1 = get_FR(pos_map1, FR_map1, bin_size)
-    tcs_map2, sem_map2 = get_FR(pos_map2, FR_map2, bin_size)
-    
-    ''' plot all the tuning curves ''' 
-    def plot_TC(binned_pos, FR, SEM, ax, LW_MEAN = 1, LW_SEM = 0.3, color='k'):
-        ax.plot(binned_pos, FR, color=color, lw=LW_MEAN, alpha=0.9)
-        ax.fill_between(binned_pos, FR + SEM, FR - SEM,
-                         color=color, linewidth=LW_SEM, alpha=0.3)
-    
-    # define the fig size and shape
-    n_rows = np.ceil(n_units/10).astype(int)
-    gs = gridspec.GridSpec(n_rows, 10, hspace=0.2, wspace=0.2)
-    fig = plt.figure(figsize=(10, n_rows)) 
-    LW_MEAN = 1
-    LW_SEM = 0.3
-        
-    binned_pos = np.linspace(-np.pi, np.pi, num=80)
-    for i in range(n_units):
-        # get axis index
-        row = i // 10
-        col = i % 10
-        ax = plt.subplot(gs[row, col])
-        
-        # plot firing rate and sem for each map
-        plot_TC(binned_pos, 
-                tcs_map1[i, :], 
-                sem_map1[i, :], 
-                ax, color='k')
-        plot_TC(binned_pos, 
-                tcs_map2[i, :], 
-                sem_map2[i, :], 
-                ax, color='r')
-            
-        # set and label axes
-        ax.set_ylim([0, 1])
-        ax.set_xlim([-np.pi, np.pi])
-        if col > 0:
-            ax.tick_params(labelleft=False)
-        elif row == n_rows//2:
-            ax.set_ylabel('normalized firing rate')
-        ax.set_xticks([-np.pi, 0, np.pi])
-        ax.set_xticklabels([0, 200, 400]) # arbitrarily call the track 400cm
-        if row < n_rows-1:
-            ax.tick_params(labelbottom=False)
-        elif col == 5:
-            ax.set_xlabel('position on track (cm)')
-        ax.tick_params(which='major', labelsize=8, pad=1)
+    ax2.set_xticks([0, 200, 400])
+    ax3.spines['right'].set_visible(False)
+    ax3.spines['top'].set_visible(False)
+    ax3.spines['left'].set_bounds(0, 12)
+    ax3.spines['bottom'].set_bounds(0, 200)
+    ax3.set_xticks([0, 100, 200])
+    ax3.set_xticklabels([0, 200, 400])
+    ax3.set_yticks([0, 12])
+    ax3.set_ylim([0, 15])
+    ax3.set_xlim([0, 200])
+    ax3.set_ylabel('FR', fontsize=axis_label, labelpad=6)
+    ax3.set_xlabel('pos. (cm)', fontsize=axis_label, labelpad=1)
+    ax3.tick_params(which='major', labelsize=tick_label, pad=0.5)
 
-    return fig, gs
+    # plot similarity matrix
+    ax1 = plt.subplot(gs[:-2, 3:])
+    im = ax1.imshow(sim, clim=[0.1, 0.7], aspect='auto', cmap='Greys')
+    ax1.set_title("network", fontsize=title_size, pad=3)
+    ax1.tick_params(labelleft=False, which='major', 
+                    labelsize=tick_label, pad=0.5)
+    ax1.set_yticks([0, 200, 400])
+    ax1.set_xticks([0, 200, 400])
+    ax1.set_xlabel("map", fontsize=axis_label, labelpad=5)
+
+    # plot cluster assignments
+    ax0 = plt.subplot(gs[-1, 3:])
+
+    all_map_colors = ['xkcd:red', c2]
+    start_idx = np.append([0], remap_idx)
+    end_idx = np.append(remap_idx, W.shape[0])
+    map_colors = []
+    for i in np.where(W[remap_idx, :])[1]:
+        map_colors.append(all_map_colors[i])
+    map_colors.append(all_map_colors[np.where(W[-1, :])[0][0]])
+
+    ax0.hlines(np.full(start_idx.shape[0], 1), start_idx, end_idx, 
+                colors=map_colors, lw=np.full(start_idx.shape[0], CLU_W), 
+                linestyles=np.full(start_idx.shape[0], 'solid'))
+    ax0.set_ylim([0.5, 1.5])
+    ax0.set_xlim([0, W.shape[0]])
+    plt.axis('off')    
+    ax0.tick_params(which='major', labelsize=tick_label, pad=0.5)
+
+    return f, gs

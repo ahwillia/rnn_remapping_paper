@@ -60,16 +60,15 @@ def extract_jacobian(model, x, **kwargs):
 
     for i in range(num_outputs):
 
-        # Define the function we want to differentiate
-        # locally at input x.
+        # Define the function we want to differentiate locally at input x.
         y = model.one_step(prev_state=x, **kwargs)
 
         # Create a one-hot vector at position i.
         z = torch.zeros(num_inputs)
         z[i] = 1
 
-        # Compute (z.T @ J) where J is the jacobian of
-        # the function we care about at x.
+        # Compute (z.T @ J)
+        # where J is the jacobian of the function we care about at x.
         y.backward(z)
 
         # For this choice of z, the backward pass yields

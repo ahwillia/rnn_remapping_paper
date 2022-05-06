@@ -15,8 +15,8 @@ class RemapTaskLoss(nn.Module):
         ----------
         alpha : float
             Relative strength of context vs position loss. When
-            alpha == 0, only decode position when alpha == 1,
-            only decode context.
+            alpha == 0, only decode position
+            alpha == 1, only decode context
         """
         super(RemapTaskLoss, self).__init__()
         self.alpha = alpha
