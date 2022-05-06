@@ -1,0 +1,6 @@
+__pycache__
+*.aux
+*.log
+
+data/neural_data/
+.ipynb_checkpoints/
