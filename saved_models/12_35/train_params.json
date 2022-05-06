@@ -1,0 +1,11 @@
+{
+    "batch_size": 124,
+    "difficulty_increase": 1,
+    "grad_clip_norm": 2.0,
+    "init_lr": 0.1,
+    "lr_step_gamma": 0.99,
+    "lr_step_size": 100,
+    "momentum": 0.0,
+    "num_iters": 5000,
+    "updates_per_difficulty_increase": 100
+}

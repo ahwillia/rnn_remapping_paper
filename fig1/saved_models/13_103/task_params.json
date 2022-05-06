@@ -1,0 +1,8 @@
+{
+    "num_maps": 2,
+    "num_steps": 301,
+    "remap_pulse_duration": 2,
+    "remap_rate": 0.02,
+    "velocity_drift_stddev": 0.1,
+    "velocity_noise_stddev": 0.3
+}
