@@ -194,8 +194,9 @@ def generate_trial(
     # Compute position by integrating velocity.
     pos_targets = (initial_position + np.cumsum(inp_vel))[:, None]
 
-    # Generate sequence of map ids. Start in map zero.
+    # Generate sequence of map ids. Choose first map randomly.
     map_ids = np.zeros(num_remaps + 1, dtype='int32')
+    map_ids[0] = rs.choice(np.arange(num_maps))
     for i in range(1, num_remaps + 1):
 
         # Must remap to a new / unique map.
@@ -212,10 +213,11 @@ def generate_trial(
             size=num_remaps
         )
     )
+    remap_times = np.concatenate(([0], remap_times))
 
     # Construct map decoding targets.
     map_dwell_times = np.diff(np.concatenate((
-        [0], remap_times, [num_steps]
+        remap_times, [num_steps]
     )))
     map_targets = []
     for m, L in zip(map_ids, map_dwell_times):
@@ -224,7 +226,7 @@ def generate_trial(
 
     # Construct remapping input pulses
     inp_remaps = np.zeros((num_steps, num_maps))
-    for t, m in zip(remap_times, map_ids[1:]):
+    for t, m in zip(remap_times, map_ids):
         inp_remaps[t, m] = 1.0
 
     inp_remaps = maximum_filter1d(
