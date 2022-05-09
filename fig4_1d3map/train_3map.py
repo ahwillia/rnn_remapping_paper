@@ -1,7 +1,4 @@
-import os
-import json
-from model import RemapManualRNN
-from plots import plot_trial, plot_init_pos_perf
+from model import RemapManualRNN, plot_trial, plot_init_pos_perf
 from task import RemapTaskLoss, generate_batch
 from torch.optim import SGD, Adam
 from torch.nn.utils.clip_grad import clip_grad_norm_
@@ -11,31 +8,41 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
+###   PARSE RANDOM SEEDS   ###
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--NPSEED",
+    help="random seed for numpy",
+    type=int
+)
+parser.add_argument(
+    "--TORCHSEED",
+    help="random seed for pytorch",
+    type=int
+)
+args = parser.parse_args()
+
 ###   HYPERPARAMETERS   ###
-NP_SEED = 12
-TORCH_SEED = 35 
-random_state = np.random.RandomState(NP_SEED)
-torch.manual_seed(TORCH_SEED)
+random_state = np.random.RandomState(args.NPSEED)
+torch.manual_seed(args.TORCHSEED)
 
 task_params = {
-    "task": 'inference',
     "num_steps": 1,
-    "num_maps": 2,
+    "num_maps": 3,
     "remap_rate": 0.02, # expect 2 remaps every 100 steps
     "velocity_drift_stddev": 0.1,
     "velocity_noise_stddev": 0.3,
-    "remap_pulse_duration": 2,
-    "sigma": 0.5,
+    "remap_pulse_duration": 5,
 }
 
 train_params = {
     "batch_size": 124,
-    "num_iters": 20000,
+    "num_iters": 30000,
     "init_lr": 0.1,
     "lr_step_size": 50,
     "lr_step_gamma": 0.99,
     "momentum": 0.0,
-    "grad_clip_norm": 2.0,
+    "grad_clip_norm": 2.0
     "updates_per_difficulty_increase": 100,
     "difficulty_increase": 1,
 }
@@ -82,7 +89,7 @@ for itercount in trange(train_params["num_iters"]):
     )
 
     # Forward pass.
-    pos_outputs, map_logits, states = model(inp_init, inp_remaps, inp_vel)
+    pos_outputs, map_logits, states = model(inp_init, inp_vel, inp_remaps)
 
     # Evaluate loss.
     total_loss, pos_loss, map_loss = \
@@ -113,7 +120,7 @@ for itercount in trange(train_params["num_iters"]):
     optimizer.step()
     scheduler.step()
 
-outdir = f"./saved_models/{NP_SEED}_{TORCH_SEED}/"
+outdir = f"./saved_models/{args.NPSEED}_{args.TORCHSEED}/"
 os.mkdir(outdir)
 
 # Save weights and loss curves.
@@ -130,12 +137,14 @@ with open(outdir + "train_params.json", "w") as f:
 with open(outdir + "rnn_params.json", "w") as f:
     json.dump(rnn_params, f, indent=4, sort_keys=True)
 
-fig, axes = plt.subplots(2, 1, sharex=True)
-axes[0].plot(pos_losses, label="position decoding")
-axes[0].plot(map_losses, label="context decoding")
-axes[0].legend()
-axes[1].plot(grad_norms)
 
-plot_trial(model, random_state, **task_params)
-plot_init_pos_perf(model, random_state, **task_params)
-plt.show()
+# PLOTS -- used only for debugging.
+
+# fig, axes = plt.subplots(2, 1, sharex=True)
+# axes[0].plot(pos_losses, label="position decoding")
+# axes[0].plot(map_losses, label="context decoding")
+# axes[0].legend()
+# axes[1].plot(grad_norms)
+# plot_trial(model, random_state, **task_params)
+# plot_init_pos_perf(model, random_state, **task_params)
+# plt.show()
