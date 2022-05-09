@@ -1,7 +1,15 @@
+import sys
+sys.path.append("../utils/")
 import numpy as np
 
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
+from mpl_toolkits.mplot3d import Axes3D
+from plot_utils import simple_cmap, ring_colormap
+
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+
 ''' general figure params '''
 # font sizes
 title_size = 10
@@ -23,15 +31,14 @@ def plot_fig1c(d, cell_ID, FR_0, FR_1, FR_0_sem, FR_1_sem, binned_pos):
     ------
     d : dict
         data for the example mouse/session
-    cell_ID : ndaintrray
+    cell_ID : int
         ID number for the example cell.
-    FR_0, FR_1 : ndarray
-        firing rate by position within each map
-        shape (n_pos_bins, n_cells)
-    FR_0_sem, FR_1_sem : ndarray
-        SEM for the firing rate arrays; shape (n_pos_bins, n_cells)
-    binned_pos : ndarray
-        centers of each position bin (cm); shape (n_pos_bins, )
+    FR_0, FR_1 : ndarray, shape (n_pos_bins, n_cells)
+        firing rate by position within each map    
+    FR_0_sem, FR_1_sem : ndarray, shape (n_pos_bins, n_cells)
+        SEM for the firing rate arrays
+    binned_pos : ndarray, shape (n_pos_bins,)
+        centers of each position bin (cm)
     '''
 
     # load relevant data
@@ -128,3 +135,98 @@ def plot_fig1c(d, cell_ID, FR_0, FR_1, FR_0_sem, FR_1_sem, binned_pos):
     ax0.tick_params(which='major', labelsize=tick_label, pad=0.5)
 
     return f, gs
+
+
+def plot_fig1d(firing_rates, binned_pos,
+    num_points=1000,
+    axlim=2,
+    reflect_x=False,
+    reflect_y=False,
+    reflect_z=False):
+    
+    '''
+    Ring manifolds for the neural data.
+
+    Params
+    ------
+    firing_rates : ndarray, shape (n_trials, n_pos_bins, n_cells)
+        firing rate by position bin and trial for all neurons
+    binned_pos : ndarray, shape (n_pos_bins,)
+        centers of each position bin (cm)
+    '''
+
+    # data params
+    n_trials, n_pos_bins, n_cells = firing_rates.shape
+
+    # get the k-means cluster centroids
+    kmeans = KMeans(n_clusters=2, n_init=50, random_state=1234)
+    M = firing_rates.reshape(n_trials, -1)
+    kmeans.fit(M)
+    m1, m2 = kmeans.cluster_centers_.reshape(2, n_pos_bins, n_cells)
+
+    # mean center
+    m1m2 = np.row_stack((m1.copy(), m2.copy()))
+    m1m2_bar = m1m2 - np.mean(m1m2, axis=0)
+
+    # Find PCs
+    pca = PCA(n_components=3)
+    x_, y_, z_ = pca.fit_transform(m1m2_bar).T
+
+    # Reflect axes if desired
+    if reflect_x:
+        x_ *= -1
+    if reflect_y:
+        y_ *= -1
+    if reflect_z:
+        z_ *= -1
+
+    # fig params
+    fig = plt.figure(figsize=(3, 2.1))
+    ax = plt.axes([0, 0, .6, 1.2], projection='3d')
+    DOT_SIZE = 30
+    PC_LW = 3
+
+    # plot activity
+    ax.scatter(
+        x_[:n_pos_bins], y_[:n_pos_bins], z_[:n_pos_bins],
+        c=binned_pos, cmap=ring_colormap(),
+        alpha=1, lw=0, s=DOT_SIZE)
+    ax.scatter(
+        x_[n_pos_bins:], y_[n_pos_bins:], z_[n_pos_bins:],
+        c=binned_pos, cmap=ring_colormap(),
+        alpha=1, lw=0, s=DOT_SIZE)
+
+    # plot shadow
+    ax.scatter(
+        x_[:n_pos_bins], y_[:n_pos_bins], 
+        np.full(n_pos_bins, -axlim),
+        color="k", alpha=.1, lw=0, s=DOT_SIZE)
+    ax.scatter(
+        x_[n_pos_bins:], y_[n_pos_bins:], 
+        np.full(n_pos_bins, -axlim),
+        color="k", alpha=.1, lw=0, s=DOT_SIZE)
+
+    # axis params
+    ax.set_xlim(-axlim, axlim)
+    ax.set_ylim(-axlim, axlim)
+    ax.set_zlim(-axlim, axlim)
+
+    # plot axes
+    axlim = axlim - 1
+    pc1 = np.asarray([[-axlim, axlim], [axlim, axlim], [-axlim, -axlim]])
+    pc2 = np.asarray([[axlim, axlim], [-axlim, axlim], [-axlim, -axlim]])
+    pc3 = np.asarray([[axlim, axlim], [axlim, axlim], [-axlim, axlim]])
+    for p in [pc1, pc2, pc3]:
+        p[0] = p[0] + 1
+        p[1] = p[1] + 2
+
+    ax.plot(*pc1, color="k", alpha=.8, lw=PC_LW)
+    ax.plot(*pc2, color="k", alpha=.8, lw=PC_LW)
+    ax.plot(*pc3, color="k", alpha=.8, lw=PC_LW)
+
+    ax.set_title('neural manifolds',
+                  fontsize=title_size, pad=-10)
+    ax.view_init(azim=135, elev=40)
+    ax.axis("off")
+
+    return fig, ax
