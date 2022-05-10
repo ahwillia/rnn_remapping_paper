@@ -1,9 +1,14 @@
 import numpy as np
 import torch
+import sys
+sys.path.append("../utils/")
+from basic_analysis import tuning_curve_1d
 
 from sklearn.utils import check_random_state
 from scipy.ndimage import maximum_filter1d
 from scipy.ndimage import gaussian_filter1d
+
+'''  '''
 
 ''' to create RNN data analogous to biological data '''
 def generate_batch_pos_vel(
@@ -264,7 +269,7 @@ def map_by_traversal(map_targets, traversals_by_obs):
 
 
 def fr_by_traversal(X, pos_targ, traversals_by_obs,\
-                    n_pos_bins=50, pos_min=-np.pi, pos_max=np.pi):
+                    n_pos_bins=50, **kwargs):
     '''
     Get the position-binned firing rate for each unit on each traversal
     Smoothes over position and normalizes within each unit
@@ -280,34 +285,25 @@ def fr_by_traversal(X, pos_targ, traversals_by_obs,\
 
     Return
     ------
-    FR_by_traversal : ndarray, shape (n_traversals, n_units, n_pos_bins)
+    FR : ndarray, shape (n_traversals, n_units, n_pos_bins)
         position-binned firing rates for each track traversal
     '''
     n_obs, n_units = X.shape
     n_traversals = np.max(traversals_by_obs) + 1
 
-    # define the position bins
-    bin_size = (pos_max - pos_min) / n_pos_bins
-    edges = np.arange(pos_min + bin_size, pos_max, bin_size)
-    bin_idx = np.digitize(pos_targ, edges)
-
     # get binned firing rate by trial
-    FR_by_traversal = np.zeros((n_traversals, n_units, n_pos_bins))
+    FR = np.zeros((n_traversals, n_units, n_pos_bins))
     for t in np.unique(traversals_by_obs):
         trial_idx = (traversals_by_obs == t)
-        b_idx = bin_idx[trial_idx]
-        trial_fr = X[trial_idx].copy()        
-        for b in np.unique(b_idx):
-            FR_by_traversal[t, :, b] = np.mean(trial_fr[b_idx==b], 
-                                               axis=0)
+        trial_tc, _ = tuning_curve_1d(X[trial_idx], pos_targ[trial_idx],\
+                                        n_pos_bins=50, **kwargs)
+        FR[t] = trial_tc.T
 
     # smooth the firing rates over position
-    FR_by_traversal = gaussian_filter1d(FR_by_traversal, 2, axis=-1, mode='wrap')
+    FR = gaussian_filter1d(FR, 2, axis=-1, mode='wrap')
 
     # normalize the firing rates for each unit
-    fr = FR_by_traversal.copy()
-    fr -= np.min(fr, axis=(0, -1))[None, :, None]
-    fr /= (np.max(fr, axis=(0, -1)) + 1e-9)[None, :, None]
-    FR_by_traversal = fr
+    FR -= np.min(FR, axis=(0, -1))[None, :, None]
+    FR /= (np.max(FR, axis=(0, -1)) + 1e-9)[None, :, None]
 
-    return FR_by_traversal
+    return FR

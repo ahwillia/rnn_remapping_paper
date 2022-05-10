@@ -2,7 +2,7 @@ import numpy as np
 from scipy import stats
 from scipy.spatial import distance as dist
 from scipy.ndimage import gaussian_filter1d
-from lvl.factor_models import KMeans
+from sklearn.cluster import KMeans
 
 # Methods from Low et al, 2021 -- see STAR Methods for more details.
 
@@ -88,12 +88,16 @@ def get_maps(Y, N=2, M=2):
         Column/map order is arbitrary.
     H : tuning curve estimates; shape (n_maps, n_cells*n_pos_bins)
     '''
+    # format the data
+    n_trials = Y.shape[0]
+    Y_flat = Y.reshape(n_trials, -1)
+
     # fit k-means model
-    model_kmeans = KMeans(n_components=N, n_restarts=500)
-    Y = Y.transpose(0, 2, 1)
-    Y_unwrapped = np.reshape(Y, (Y.shape[0], -1))
-    model_kmeans.fit(Y_unwrapped)
-    W, H = model_kmeans.factors
+    kmeans = KMeans(n_clusters=N, n_init=100, random_state=1234)
+    kmeans.fit(Y_flat)
+    H = kmeans.cluster_centers_
+    W_raw = kmeans.labels_
+    W = np.column_stack((W_raw, np.abs(W_raw - 1))) 
 
     # keep trial index for the M most common maps
     if M < N:

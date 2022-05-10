@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 from matplotlib import gridspec
 from mpl_toolkits.mplot3d import Axes3D
 from plot_utils import simple_cmap, ring_colormap
+from model_utils import sample_rnn_data, format_rnn_data
+from basic_analysis import tuning_curve_1d, compute_misalignment
 
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
@@ -26,7 +28,7 @@ c2 = 'k'
 pos_col = 'xkcd:cobalt blue'
 est_col = 'xkcd:saffron'
 
-def plot_fig1c(d, cell_ID, FR_0, FR_1, FR_0_sem, FR_1_sem, binned_pos):
+def plot_c(d, cell_ID, FR_0, FR_1, FR_0_sem, FR_1_sem, binned_pos):
     '''
     From Low et al, 2021
     Example of remapping for a single session:
@@ -70,10 +72,10 @@ def plot_fig1c(d, cell_ID, FR_0, FR_1, FR_0_sem, FR_1_sem, binned_pos):
     ax2 = plt.subplot(gs[:-2, :3])
     sdx_0 = B[map0_idx, np.where(cells==cell_ID)[0][0]].astype(bool)
     ax2.scatter(A[map0_idx, 0][sdx_0], A[map0_idx, 2][sdx_0],\
-                color=c1, lw=0, s=0.3, alpha=.3)
+                color=c2, lw=0, s=0.3, alpha=.3)
     sdx_1 = B[map1_idx, np.where(cells==cell_ID)[0][0]].astype(bool)
     ax2.scatter(A[map1_idx, 0][sdx_1], A[map1_idx, 2][sdx_1],\
-                color=c2, lw=0, s=0.3, alpha=.2)
+                color=c1, lw=0, s=0.3, alpha=.2)
     ax2.set_xlim((0, 400))
     ylim_ax = [0, np.max(A[:, 2])]
     ax2.set_ylim(ylim_ax[::-1])
@@ -86,16 +88,16 @@ def plot_fig1c(d, cell_ID, FR_0, FR_1, FR_0_sem, FR_1_sem, binned_pos):
     # plot tuning curves with SEM
     sdx = (np.where(cells==cell_ID)[0][0]).astype(int)
     ax3 = plt.subplot(gs[-2:, :3])
-    ax3.plot(FR_0[:, sdx], c1, lw=LW_MEAN, alpha=0.9)
+    ax3.plot(FR_0[:, sdx], c2, lw=LW_MEAN, alpha=0.9)
     ax3.fill_between(binned_pos/2,\
                         FR_0[:, sdx] + FR_0_sem[:, sdx],\
                         FR_0[:, sdx] - FR_0_sem[:, sdx],\
-                        color=c1, linewidth=LW_SEM, alpha=0.3)
-    ax3.plot(FR_1[:, sdx], color=c2, lw=LW_MEAN, alpha=1)
+                        color=c2, linewidth=LW_SEM, alpha=0.3)
+    ax3.plot(FR_1[:, sdx], color=c1, lw=LW_MEAN, alpha=1)
     ax3.fill_between(binned_pos/2,\
                         FR_1[:, sdx] + FR_1_sem[:, sdx],\
                         FR_1[:, sdx] - FR_1_sem[:, sdx],\
-                        color=c2, linewidth=LW_SEM, alpha=0.4)
+                        color=c1, linewidth=LW_SEM, alpha=0.4)
     
     ax2.set_xticks([0, 200, 400])
     ax3.spines['right'].set_visible(False)
@@ -124,7 +126,7 @@ def plot_fig1c(d, cell_ID, FR_0, FR_1, FR_0_sem, FR_1_sem, binned_pos):
     # plot cluster assignments
     ax0 = plt.subplot(gs[-1, 3:])
 
-    all_map_colors = ['xkcd:red', c2]
+    all_map_colors = [c2, c1]
     start_idx = np.append([0], remap_idx)
     end_idx = np.append(remap_idx, W.shape[0])
     map_colors = []
@@ -143,7 +145,7 @@ def plot_fig1c(d, cell_ID, FR_0, FR_1, FR_0_sem, FR_1_sem, binned_pos):
     return f, gs
 
 
-def plot_fig1d(firing_rates, binned_pos,
+def plot_d(firing_rates, binned_pos,
     num_points=1000,
     axlim=2,
     reflect_x=False,
@@ -239,7 +241,7 @@ def plot_fig1d(firing_rates, binned_pos,
     return fig, ax
 
 
-def plot_fig1e(inp_vel, inp_remaps):
+def plot_e(inp_vel, inp_remaps):
     '''
     Inputs for the 1D navigation/working memory task.
 
@@ -249,7 +251,15 @@ def plot_fig1e(inp_vel, inp_remaps):
         input velocity for an example trial
     inp_remaps : ndarray, shape (num_steps, num_maps)
         binary context cues for an example trial
+
+    inp_vel : torch.tensor, shape (num_steps, batch_size)
+        velocity inputs from generate_batch()
+    inp_remaps : torch.tensor, shape (num_steps, batch_size, num_maps)
+        binary context cues from generate_batch()
     '''
+    # format inputs and extract a single trial
+    inp_vel = inp_vel.detach().numpy()[:, 0]
+    inp_remaps = inp_remaps.detach().numpy()[:, 0, :]
 
     # fig params
     gs = gridspec.GridSpec(4, 1, hspace=0)
@@ -286,19 +296,25 @@ def plot_fig1e(inp_vel, inp_remaps):
     return f, gs
 
 
-def plot_fig1f(targ, pred, map_logits):
+def plot_f(pos_targets, pos_outputs, map_logits):
     '''
     Outputs for the 1D navigation/working memory task.
 
     Params
     ------
-    targ : ndarray, shape (num_steps,)
-        true positions for an example trial
-    pred : ndarray, shape (num_steps,)
-        estimated positions for an example trial
-    map_logits : ndarray, shape (num_steps, num_maps)
-        context estimates for an example trial
+    pos_targets : torch.tensor, shape (num_steps, batch_size)
+        true positions from generate_batch()
+    pos_outputs : torch.tensor, shape (num_steps, batch_size, 2)
+        model estimated positions
+    map_logits : torch.tensor, shape (num_steps, batch_size, num_maps)
+        model estimated contexts
     '''
+    # format data and extract a single example trial
+    map_logits = map_logits.detach().numpy()[:, 0, :]
+    targ = pos_targets.detach().numpy()[:, 0, :]
+    targ = (targ + np.pi) % (2 * np.pi) - np.pi
+    pred = pos_outputs.detach().numpy()[:, 0, :]
+    pred = np.arctan2(pred[:, 1], pred[:, 0])
 
     # fig params
     gs = gridspec.GridSpec(4, 1, hspace=0)
@@ -344,63 +360,7 @@ def plot_fig1f(targ, pred, map_logits):
     return f, gs
 
 
-def plot_fig1g(pos_losses, map_losses):
-    '''
-    Final loss for position and context estimates across models
-    (see task.py for the loss functions)
-
-    Params
-    ------
-    pos_losses : ndarray, shape (n_models,)
-        final model loss for position estimate vs. true position
-    map_losses : ndarray, shape (n_models,)
-        final model loss for context estimate vs. true context
-    '''
-    n_models = pos_losses.shape[0]
-
-    # figure params
-    f, ax = plt.subplots(1, 1, figsize=(0.5, 1))
-    pos_col = 'xkcd:cobalt blue'
-    c1 = 'xkcd:scarlet'
-    DOT_SIZE = 10
-    DOT_LW = 1
-
-    # for jittering points
-    JIT = np.random.randn(n_models) * 0.03
-
-    # 1 = pos loss, 2 = map loss
-    ax.scatter(np.full(n_models, 1)+JIT, 
-               pos_losses,
-               c=pos_col,
-               s=DOT_SIZE, lw=DOT_LW,
-               alpha=0.5
-              )
-    ax.scatter(np.full(n_models, 2)+JIT, 
-               map_losses,
-               c=c1,
-               s=DOT_SIZE, lw=DOT_LW,
-               alpha=0.5
-              )
-
-    # axis params
-    ax.spines['right'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-    ax.spines['left'].set_bounds(0, 0.06)
-    ax.spines['bottom'].set_bounds(1, 2)
-
-    ax.set_xlim([0.75, 2.5])
-    ax.set_ylim([-0.002, 0.05])
-    ax.set_xticks([1, 2])
-    ax.set_xticklabels(['pos\nest', 'map\nest'])
-    ax.set_yticks([0, 0.03, 0.06])
-    ax.set_ylabel('final loss', fontsize=axis_label, labelpad=1)
-
-    ax.tick_params(which='major', labelsize=tick_label, pad=0.5)
-
-    return f, ax
-
-
-def plot_fig1h(firing_rates, network_similarity, map_idx, ex_units):
+def plot_g(firing_rates, network_similarity, map_idx, ex_units):
     '''
     Replicate fig. 1b for 6 example model units
 
@@ -527,7 +487,7 @@ def plot_fig1h(firing_rates, network_similarity, map_idx, ex_units):
     return f, ax
 
 
-def plot_fig1i(X, pos_targets,
+def plot_h(X, pos_targets,
     num_points=1000,
     axlim=2,
     reflect_x=False,
@@ -608,15 +568,12 @@ def plot_fig1i(X, pos_targets,
     return fig, ax
 
 
-# TODO plot_fig1j - ring alignment histogram
-
-
-def plot_fig1k(X, map_targets, \
-                top_num=4, top_num_1=3, \
-                most_var_thresh=0.90):
+def plot_j(data_folder, model_IDs, \
+            top_num=4, top_num_1=3, \
+            most_var_thresh=0.90):
     '''
-    Variance explained by each component for both maps together
-    and for each map alone (insets).
+    Average variance explained by each component across maps
+    for both maps together and for each map alone (insets).
 
     Params
     ------
@@ -632,31 +589,12 @@ def plot_fig1k(X, map_targets, \
         threshold for how many components explain "most of the variance"
     '''
     # data params
+    n_models = len(model_IDs)
+    inputs, outputs, targets = sample_rnn_data(data_folder, model_IDs[0])
+    X, map_targ, pos_targ = format_rnn_data(outputs["hidden_states"],\
+                                            targets["map_targets"],\
+                                            targets["pos_targets"])
     hidden_size = X.shape[-1]
-
-    # PCA on both manifolds
-    pca = PCA().fit(X)
-    var = pca.explained_variance_
-    total_var = np.sum(var)
-    pct_var = (var / total_var)
-
-    # PCA on each manifold
-    X0 = X[map_targets==0]
-    X1 = X[map_targets==1]
-
-    pca_0 = PCA().fit(X0)
-    var_0 = pca_0.explained_variance_
-    pct_var_0 = (var_0 / np.sum(var_0))
-
-    pca_1 = PCA().fit(X1)
-    var_1 = pca_1.explained_variance_
-    pct_var_1 = (var_1 / np.sum(var_1))
-
-    # print the results
-    cum_var = np.cumsum(pct_var)
-    most_var = np.argmin(np.abs(cum_var - most_var_thresh))
-    print(f'{3} PCs explain {cum_var[2]:.2%} of the variance')
-    print(f'{most_var+1} PCs explain {cum_var[most_var]:.2%} of the variance')
 
     # figure params
     f = plt.figure(figsize=(1.5, 0.8))
@@ -664,22 +602,61 @@ def plot_fig1k(X, map_targets, \
     DOT_LW = 0.2
     CUM_LW = 1
 
-    # both manifolds
-    ax0 = plt.axes([0, 0, 1, 1])
-    ax0.plot(np.arange(hidden_size) + 1,
-             np.cumsum(pct_var),
-             c='k', lw=CUM_LW,
-             zorder=0)
-    ax0.scatter(np.arange(hidden_size) + 1,
-                np.cumsum(pct_var),
-                c='k', s=DOT_SIZE-2, lw=0,
-                zorder=1)
-    ax0.scatter(np.arange(top_num) + 1,
-                np.cumsum(pct_var)[:top_num],
-                facecolors='r', edgecolors='k',
-                s=DOT_SIZE, lw=DOT_LW,
-                zorder=2, label=f'{top_num} PCs')
+    all_var = np.zeros((n_models, hidden_size))
+    all_var_0 = np.zeros((n_models, hidden_size))
+    all_var_1 = np.zeros((n_models, hidden_size))
+    for i, m_id in enumerate(model_IDs):
+        # get the rnn data
+        inputs, outputs, targets = sample_rnn_data(data_folder, m_id)
+        X, map_targ, pos_targ = format_rnn_data(outputs["hidden_states"],\
+                                                targets["map_targets"],\
+                                                targets["pos_targets"])
+        hidden_size = X.shape[-1]
+        
+        # PCA on both manifolds
+        pca = PCA().fit(X)
+        var = pca.explained_variance_
+        total_var = np.sum(var)
+        pct_var = (var / total_var)
+        cum_var = np.cumsum(pct_var)
+        all_var[i, :] = cum_var
+        
+        # PCA on each manifold
+        X0 = X[map_targ==0]
+        X1 = X[map_targ==1]
 
+        pca_0 = PCA().fit(X0)
+        var_0 = pca_0.explained_variance_
+        pct_var_0 = (var_0 / np.sum(var_0))
+        cum_var_0 = np.cumsum(pct_var_0)
+        all_var_0[i, :] = cum_var_0
+
+        pca_1 = PCA().fit(X1)
+        var_1 = pca_1.explained_variance_
+        pct_var_1 = (var_1 / np.sum(var_1))
+        cum_var_1 = np.cumsum(pct_var_1)
+        all_var_1[i, :] = cum_var_1
+
+    # print the results
+    avg_var = np.mean(all_var, axis=0)
+    most_var = np.argmin(np.abs(avg_var - most_var_thresh))
+    print(f'on average, {top_num} PCs explain {avg_var[top_num-1]:.2%} of the variance')
+    print(f'on average, {most_var+1} PCs explain {avg_var[most_var]:.2%} of the variance')
+        
+    # plot the average across models
+    avg_var = np.mean(all_var, axis=0)
+    ax0 = plt.axes([0, 0, 1, 1])
+    ax0.scatter(np.arange(top_num, hidden_size) + 1,
+                avg_var[top_num:],
+                c='k', s=DOT_SIZE-2,
+                lw=0, zorder=1)
+    ax0.scatter(np.arange(top_num) + 1,
+                avg_var[:top_num],
+                facecolors='r', edgecolors='k',
+                s=DOT_SIZE, lw=DOT_LW, zorder=1)
+    ax0.plot(np.arange(hidden_size) + 1, avg_var,
+             c='k', lw=CUM_LW, zorder=0)
+        
     # ticks and labels
     ax0.spines['right'].set_visible(False)
     ax0.spines['top'].set_visible(False)
@@ -697,17 +674,18 @@ def plot_fig1k(X, map_targets, \
                    fontsize=axis_label, labelpad=1)
 
     # map 1
+    avg_var_0 = np.mean(all_var_0, axis=0)
     ax1 = plt.axes([0.2, 0.25, 0.35, 0.4])
     ax1.plot(np.arange(hidden_size) + 1,
-             np.cumsum(pct_var_0),
-             c='k', lw=CUM_LW/2,
+             avg_var_0,
+             c='k', lw=CUM_LW/1.5,
              zorder=0)
-    ax1.scatter(np.arange(hidden_size) + 1,
-                np.cumsum(pct_var_0),
+    ax1.scatter(np.arange(top_num_1, hidden_size) + 1,
+                avg_var_0[top_num_1:],
                 c='k', s=DOT_SIZE-3, lw=0,
                 zorder=1)
     ax1.scatter(np.arange(top_num_1) + 1,
-                np.cumsum(pct_var_0)[:top_num_1],
+                avg_var_0[:top_num_1],
                 facecolors='r', edgecolors='k',
                 s=DOT_SIZE-2, lw=DOT_LW,
                 zorder=2)
@@ -726,17 +704,18 @@ def plot_fig1k(X, map_targets, \
                   fontsize=axis_label, pad=3)
 
     # map 2
+    avg_var_1 = np.mean(all_var_1, axis=0)
     ax2 = plt.axes([0.63, 0.25, 0.35, 0.4])
     ax2.plot(np.arange(hidden_size) + 1,
-             np.cumsum(pct_var_1),
-             c='k', lw=CUM_LW/2,
+             avg_var_1,
+             c='k', lw=CUM_LW/1.5,
              zorder=0)
-    ax2.scatter(np.arange(hidden_size) + 1,
-                np.cumsum(pct_var_1),
+    ax2.scatter(np.arange(top_num_1, hidden_size) + 1,
+                avg_var_1[top_num_1:],
                 c='k', s=DOT_SIZE-3, lw=0,
                 zorder=1)
     ax2.scatter(np.arange(top_num_1) + 1,
-                np.cumsum(pct_var_1)[:top_num_1],
+                avg_var_1[:top_num_1],
                 facecolors='r', edgecolors='k',
                 s=DOT_SIZE-2, lw=DOT_LW,
                 zorder=2, label=f'{top_num_1} PCs')
@@ -755,3 +734,126 @@ def plot_fig1k(X, map_targets, \
                   fontsize=axis_label, pad=3)
 
     return f, [ax0, ax1, ax2]
+
+
+''' POSSIBLE SUPPLEMENTAL FIGS '''
+def plot_supp_1(data_folder, model_IDs):
+    '''
+    Final loss for position and context estimates across models
+    (see task.py for the loss functions)
+
+    Params
+    ------
+    pos_losses : ndarray, shape (n_models,)
+        final model loss for position estimate vs. true position
+    map_losses : ndarray, shape (n_models,)
+        final model loss for context estimate vs. true context
+    '''
+    # data params
+    n_models = len(model_IDs)
+    pos_losses = np.asarray([])
+    map_losses = np.asarray([])
+    for m_id in model_IDs:
+        pos_loss = np.load(f"{data_folder}/{m_id}/pos_losses.npy")
+        pos_losses = np.append(pos_losses, pos_loss[-1])
+        map_loss = np.load(f"{data_folder}/{m_id}/map_losses.npy")
+        map_losses = np.append(map_losses, map_loss[-1])
+    print(f'mean +/- standard error of the mean:')
+    print(f'position loss: {np.mean(pos_losses):.3} +/- {stats.sem(pos_losses):.3}')
+    print(f'context loss: {np.mean(map_losses):.3} +/- {stats.sem(map_losses):.3}')
+
+    # figure params
+    f, ax = plt.subplots(1, 1, figsize=(0.5, 1))
+    pos_col = 'xkcd:cobalt blue'
+    c1 = 'xkcd:scarlet'
+    DOT_SIZE = 10
+    DOT_LW = 1
+
+    # for jittering points
+    JIT = np.random.randn(n_models) * 0.03
+
+    # 1 = pos loss, 2 = map loss
+    ax.scatter(np.full(n_models, 1)+JIT, 
+               pos_losses,
+               c=pos_col,
+               s=DOT_SIZE, lw=DOT_LW,
+               alpha=0.5
+              )
+    ax.scatter(np.full(n_models, 2)+JIT, 
+               map_losses,
+               c=c1,
+               s=DOT_SIZE, lw=DOT_LW,
+               alpha=0.5
+              )
+
+    # axis params
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['left'].set_bounds(0, 0.06)
+    ax.spines['bottom'].set_bounds(1, 2)
+
+    ax.set_xlim([0.75, 2.5])
+    ax.set_ylim([-0.002, 0.05])
+    ax.set_xticks([1, 2])
+    ax.set_xticklabels(['pos\nest', 'map\nest'])
+    ax.set_yticks([0, 0.03, 0.06])
+    ax.set_ylabel('final loss', fontsize=axis_label, labelpad=1)
+
+    ax.tick_params(which='major', labelsize=tick_label, pad=0.5)
+
+    return f, ax
+
+
+def plot_supp_2(data_folder, model_IDs):
+    '''
+    Misalignment scores for manifolds from all trained models
+    Scores are normalized:
+        1 = perfectly aligned
+        0 = 2.5% of shuffle (i.e., p = 0.025)
+    '''
+    # data params
+    n_models = len(model_IDs)
+    alignment_scores = np.asarray([])
+    for i, m_id in enumerate(model_IDs):
+        # get the rnn data
+        inputs, outputs, targets = sample_rnn_data(data_folder, m_id)
+        X, map_targ, pos_targ = format_rnn_data(outputs["hidden_states"],\
+                                                targets["map_targets"],\
+                                                targets["pos_targets"])
+        
+        # get the manifolds for each map and compute misalignment
+        X0_binned, binned_pos = tuning_curve_1d(X[map_targ==0],\
+                                                pos_targ[map_targ==0])
+        X1_binned, _ = tuning_curve_1d(X[map_targ==1],\
+                                        pos_targ[map_targ==1])
+        norm_align, _, _, _ = compute_misalignment(X0_binned, X1_binned)
+        
+        alignment_scores = np.append(alignment_scores, norm_align)
+
+    print(f'mean alignment = {np.mean(alignment_scores):.2}')
+    print(f'sem misalignment = {stats.sem(alignment_scores):.2}')
+
+    # fig params 
+    f, ax = plt.subplots(1, 1, figsize=(1.8, 0.5))
+    BAR_LW = 1
+    THRESH_LW = 2
+
+    ax.hist(
+        alignment_scores,
+        np.linspace(0.0, 1.0, 50),
+        color="gray", lw=BAR_LW, edgecolor="k")
+    ax.set_xlabel("manifold misalignment", fontsize=axis_label, labelpad=1)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.plot([1, 1], [0, 3], dashes=[1, 1], lw=THRESH_LW, color="k")
+    ax.text(1, 3.2, "shuff\nthresh", fontsize=tick_label,\
+            horizontalalignment='center')
+
+    ax.set_xlim([0, 1.2])
+    ax.set_xticks(np.arange(0, 1.4, 0.2))
+    ax.set_yticks([0, 3, 6])
+    ax.tick_params(which='major', labelsize=tick_label, pad=0.5)
+    ax.spines["left"].set_bounds(0, 6)
+    ax.set_ylabel("count", fontsize=axis_label, labelpad=1)
+
+    return f, ax
