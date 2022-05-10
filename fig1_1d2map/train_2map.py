@@ -1,7 +1,8 @@
 import os
 import json
 import sys
-sys.path.append("../model_scripts/")from model import RemapManualRNN
+sys.path.append("../model_scripts/")
+from model import RemapManualRNN
 from plots import plot_trial, plot_init_pos_perf
 from task import RemapTaskLoss, generate_batch
 from torch.optim import SGD, Adam
