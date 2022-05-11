@@ -3,6 +3,8 @@ sys.path.insert(1, '../model_scripts/')
 sys.path.insert(1, '../utils/')
 import os
 import json
+import sys
+sys.path.append("../model_scripts/")
 from model import RemapManualRNN
 from debug_plots import plot_trial, plot_init_pos_perf
 from task import RemapTaskLoss, generate_batch
