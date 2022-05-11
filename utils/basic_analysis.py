@@ -1,54 +1,11 @@
 import numpy as np
-import torch
 from scipy.ndimage import gaussian_filter1d
-import os
-import json
-
-def load_model_params(model_ID):
-    model = torch.load(f"{data_folder}/{model_ID}/model_weights.pt")
-    with open(f"{data_folder}/{model_ID}/task_params.json", 'r') as f:
-        task_params = json.load(f)
-    with open(f"{data_folder}/{model_ID}/rnn_params.json", 'r') as f:
-        rnn_params = json.load(f)
-    return model, task_params, rnn_params
-
-def sample_data(model_ID):
-    # set random seeds
-    NP_SEED = int(model_ID.split('_')[0])
-    TORCH_SEED = int(model_ID.split('_')[1])
-    random_state = np.random.RandomState(NP_SEED)
-    torch.manual_seed(TORCH_SEED)
-
-    # get sample neural activity, position targets, map targets, inputs
-    inp_init, inp_remaps, inp_vel, pos_targets, map_targets = \
-            generate_batch(100, random_state, **task_params)
-
-    pos_outputs, map_logits, hidden_states = model(inp_init, inp_vel, inp_remaps)
-
-    X = hidden_states.detach().numpy()
-    X = X.reshape(-1, X.shape[-1])
-
-    map_targ = map_targets.detach().numpy().ravel()
-    map_logits = map_logits.detach().numpy()[:, 0, :]
-    inp_remaps = inp_remaps.detach().numpy()[:, 0, :]
-
-    pos_targ = pos_targets.detach().numpy()
-    targ = pos_targ[:, 0, :]
-    targ = (targ + np.pi) % (2 * np.pi) - np.pi
-    pos_targ = pos_targ.ravel()
-    pos_targ = (pos_targ + np.pi) % (2 * np.pi) - np.pi
-
-    pos_outputs = pos_outputs.detach().numpy()
-    pred = pos_outputs[:, 0, :]
-    pred = np.arctan2(pred[:, 1], pred[:, 0])
-    pos_outputs = pos_outputs.ravel()
-
 
 def tuning_curve_1d(X, pos,\
                     n_pos_bins=50, pos_min=-np.pi, pos_max=np.pi,\
                     smooth=False, normalize=False):
     '''
-    Get the binned firing rate for a given stimulus.
+    Get the position-binned firing rates.
 
     Params
     ------
