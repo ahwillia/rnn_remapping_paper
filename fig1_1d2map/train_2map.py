@@ -1,7 +1,10 @@
+import sys
+sys.path.insert(1, '../model_scripts/')
+sys.path.insert(1, '../utils/')
 import os
 import json
 from model import RemapManualRNN
-from plots import plot_trial, plot_init_pos_perf
+from debug_plots import plot_trial, plot_init_pos_perf
 from task import RemapTaskLoss, generate_batch
 from torch.optim import SGD, Adam
 from torch.nn.utils.clip_grad import clip_grad_norm_
@@ -17,11 +20,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--NPSEED",
     help="random seed for numpy",
+    default=999,
     type=int
 )
 parser.add_argument(
     "--TORCHSEED",
     help="random seed for pytorch",
+    default=998,
     type=int
 )
 args = parser.parse_args()
@@ -124,8 +129,8 @@ for itercount in trange(train_params["num_iters"]):
     optimizer.step()
     scheduler.step()
 
-outdir = f"./saved_models/{args.NPSEED}_{args.TORCHSEED}/"
-os.mkdir(outdir)
+outdir = f"../data/saved_models/1d_2map/{args.NPSEED}_{args.TORCHSEED}/"
+os.makedirs(outdir, exist_ok=True)
 
 # Save weights and loss curves.
 torch.save(model, outdir + "model_weights.pt")
@@ -152,3 +157,4 @@ with open(outdir + "rnn_params.json", "w") as f:
 # plot_trial(model, random_state, **task_params)
 # plot_init_pos_perf(model, random_state, **task_params)
 # plt.show()
+

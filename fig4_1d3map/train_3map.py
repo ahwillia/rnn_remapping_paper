@@ -1,4 +1,10 @@
-from model import RemapManualRNN, plot_trial, plot_init_pos_perf
+import os
+import sys
+import json
+sys.path.insert(1, '../model_scripts/')
+sys.path.insert(1, '../utils/')
+from model import RemapManualRNN
+from debug_plots import plot_trial, plot_init_pos_perf
 from task import RemapTaskLoss, generate_batch
 from torch.optim import SGD, Adam
 from torch.nn.utils.clip_grad import clip_grad_norm_
@@ -7,17 +13,20 @@ from tqdm import trange
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import argparse
 
 ###   PARSE RANDOM SEEDS   ###
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--NPSEED",
     help="random seed for numpy",
+    default=999,
     type=int
 )
 parser.add_argument(
     "--TORCHSEED",
     help="random seed for pytorch",
+    default=998,
     type=int
 )
 args = parser.parse_args()
@@ -32,7 +41,7 @@ task_params = {
     "remap_rate": 0.02, # expect 2 remaps every 100 steps
     "velocity_drift_stddev": 0.1,
     "velocity_noise_stddev": 0.3,
-    "remap_pulse_duration": 5,
+    "remap_pulse_duration": 2,
 }
 
 train_params = {
@@ -42,7 +51,7 @@ train_params = {
     "lr_step_size": 50,
     "lr_step_gamma": 0.99,
     "momentum": 0.0,
-    "grad_clip_norm": 2.0
+    "grad_clip_norm": 2.0,
     "updates_per_difficulty_increase": 100,
     "difficulty_increase": 1,
 }
@@ -120,8 +129,8 @@ for itercount in trange(train_params["num_iters"]):
     optimizer.step()
     scheduler.step()
 
-outdir = f"./saved_models/{args.NPSEED}_{args.TORCHSEED}/"
-os.mkdir(outdir)
+outdir = f"../data/saved_models/1d_3map/{args.NPSEED}_{args.TORCHSEED}/"
+os.makedirs(outdir, exist_ok=True)
 
 # Save weights and loss curves.
 torch.save(model, outdir + "model_weights.pt")
@@ -139,7 +148,6 @@ with open(outdir + "rnn_params.json", "w") as f:
 
 
 # PLOTS -- used only for debugging.
-
 # fig, axes = plt.subplots(2, 1, sharex=True)
 # axes[0].plot(pos_losses, label="position decoding")
 # axes[0].plot(map_losses, label="context decoding")

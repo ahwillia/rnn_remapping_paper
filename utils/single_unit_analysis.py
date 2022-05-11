@@ -1,41 +1,49 @@
-def tuning_curve_1d():
-    '''
-    ** IN PROGRESS **
+import numpy as np
+from task import generate_batch
 
-    Get the binned firing rate for a given stimulus.
+from scipy.special import softmax
+from scipy import stats
+from scipy.ndimage import gaussian_filter1d
+from sklearn.decomposition import PCA
+
+def get_FR(pos, firing_rates, bin_size, smooth=True):
+    '''
+    Compute the average and SEM firing rate by position for a given set
+    of position and firing rate observations.
 
     Params
     ------
-    x : nadarray
-        variable of interest by observation; shape (n_obs,)
-    y : ndarray
+    pos : ndarray
+        circular position at each time point; shape (batch_size * num_steps, 1)
+    firing_rates : ndarray
+        firing rate at each time point for each unit; shape (n_units, batch_size * num_steps)
+    bin_size : float
+        position bin size
+    smooth : bool
+        optional, if True tuning curve will be gaussian smoothed (sigma=2); default is True
 
+    Returns
+    -------
+    firing_rate_avg : ndarray
+        average firing rate in each position bin; shape (n_units, n_pos_bins)
+    firing_rate_sem : ndarray
+        SEM for the firing rate in each position bin; shape (n_units, n_pos_bins)
     '''
-    n_units = X.shape[-1]
-    n_pos_bins = 50
-    bin_size = (2 * np.pi) / n_pos_bins
+    n_units = firing_rates.shape[0]
 
-    # define the position bins
-    edges = np.arange(-np.pi + bin_size, np.pi, bin_size)
-    bin_idx = np.digitize(pos_targ, edges)
+    # define position bins
+    edges = np.arange(np.min(pos), np.max(pos) + bin_size, bin_size)
+    b_idx = np.digitize(pos, edges)
+    unique_bdx = np.unique(b_idx)
 
-    # get binned firing rate by trial
-    FR_by_traversal = np.zeros((n_traversals, n_units, n_pos_bins))
-    for t in np.unique(trials_by_obs):
-        trial_idx = (trials_by_obs == t)
-        b_idx = bin_idx[trial_idx]
-        trial_pos = pos_targ[trial_idx].copy()
-        trial_fr = X[trial_idx].copy()
+    # find FR in each bin
+    firing_rate_avg = np.zeros((n_units, unique_bdx.shape[0]))
+    firing_rate_sem = np.zeros((n_units, unique_bdx.shape[0]))
+    for  i, b in enumerate(unique_bdx):
+        firing_rate_sem[:, i] = stats.sem(firing_rates[:, b_idx == b], axis=1)
+        firing_rate_avg[:, i] = np.mean(firing_rates[:, b_idx == b], axis=1)
+    if smooth:
+        firing_rate_avg = gaussian_filter1d(firing_rate_avg, 2, axis=1, mode='wrap')
+        fr_sem = gaussian_filter1d(firing_rate_sem, 2, axis=1, mode='wrap')
         
-        for b in np.unique(b_idx):
-            FR_by_traversal[t, :, b] = np.mean(trial_fr[b_idx==b], 
-                                               axis=0)
-
-    # smooth the firing rates over position
-    FR_by_traversal = gaussian_filter1d(FR_by_traversal, 2, axis=-1, mode='wrap')
-
-    # normalize the firing rates for each unit
-    fr = FR_by_traversal.copy()
-    fr -= np.min(fr, axis=(0, -1))[None, :, None]
-    fr /= (np.max(fr, axis=(0, -1)) + 1e-9)[None, :, None]
-    FR_by_traversal = fr.copy()
+    return firing_rate_avg, firing_rate_sem

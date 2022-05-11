@@ -1,5 +1,4 @@
 import sys
-sys.path.append("../utils/")
 sys.path.append("../model_scripts/")
 import numpy as np
 from task import generate_batch
@@ -121,11 +120,13 @@ def plot_trial(model, random_state, **kwargs):
     inp_remaps = inp_remaps.detach().numpy()[:, 0, :]
     axes[2].plot(softmax(map_logits, axis=1)[:, 0], color="red", label="A")
     axes[2].plot(softmax(map_logits, axis=1)[:, 1], color="black", label="B")
-    # axes[1].plot(softmax(map_logits, axis=1)[:, 2], color="green", label="C")
+    if map_logits.shape[1] == 3:
+        axes[2].plot(softmax(map_logits, axis=1)[:, 2], color="green", label="C")
     axes[2].legend(title="context prediction")
     axes[3].plot(inp_remaps[:, 0], color="red", label="A")
     axes[3].plot(inp_remaps[:, 1], color="black", label="B")
-    # axes[2].plot(inp_remaps[:, 2], color="green", label="C")
+    if map_logits.shape[1] == 3:
+        axes[3].plot(inp_remaps[:, 2], color="green", label="C")
     axes[3].legend(title="context cues/inputs")
 
     return fig, axes
