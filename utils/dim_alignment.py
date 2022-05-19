@@ -29,50 +29,54 @@ def remapping_dim(X0, X1):
     X1_bar = np.mean(X1, axis=0)
     return X0_bar - X1_bar
 
-# def position_subspace(X, pos_targ, map_targ, \
-#                         num_pcs=2, model_2d=False):
-#     '''
-#     get the position subspace for each context
-#     num_pcs : int
-#         n dims for the pos subspace
-#         use 2 for 1D model, 4 for 2D model
-#     model_2d : bool
-#         was the model trained on the 2D navigation task
-#     '''
-#     # split by context
-#     X0 = X[map_targ==0]
-#     X1 = X[map_targ==1]
-#     pos0 = pos_targ[map_targ==0]
-#     pos1 = pos_targ[map_targ==1]
+def position_subspace(X_tc, num_pcs=2):
+    '''
+    get the position subspace across contexts
 
-#     # position-binned firing rates (n_pos_bins, hidden_size)
-#     if model_2d:
-#         tc_X0 = tuning_curve_2d(X0, pos0[:, 0], pos0[:, 1])
-#         tc_X1 = tuning_curve_2d(X1, pos1[:, 0], pos1[:, 1])
-#         X0_tc = tc_X0.reshape(-1, hidden_size)
-#         X1_tc = tc_X1.reshape(-1, hidden_size)
-#     else:
-#         X0_tc = tuning_curve_1d(X0, pos0, n_bins=250)
-#         X1_tc = tuning_curve_1d(X1, pos1, n_bins=250)
+    Params
+    ------
+    X_tc : ndarray, shape (n_maps, n_pos_bins, n_units)
+        avg firing rate in each position bin for each context
+    num_pcs : int
+        n dims for the pos subspace
+        use 2 for 1D model, 3 for 2D model
 
-#     # mean-center, normalize, combine
-#     m1 = X0_tc - np.mean(X0_tc, axis=0, keepdims=True)
-#     m2 = X1_tc - np.mean(X1_tc, axis=0, keepdims=True)
-#     m1_norm = np.linalg.norm(m1)
-#     m2_norm = np.linalg.norm(m2)
-#     m1 /= m1_norm
-#     m2 /= m2_norm
-#     X_all = np.concatenate((m1, m2), axis=0)
+    Returns
+    -------
+    pos_subspace : ndarray, shape (n_units, n_pcs)
+        basis set for the position subspace
+    '''
+    # check if tc is one or multiple maps
+    if len(X_tc.shape)==2:
+        X_tc = X_tc[None, :, :]
+    n_maps = X_tc.shape[0]
+    
+    # mean center and normalize within each map
+    for i in range(n_maps):
+        X_map_tc = X_tc[i].copy()
+        m = X_map_tc - np.mean(X_map_tc, axis=0, keepdims=True)
+        m_norm = np.linalg.norm(m)
+        m /= m_norm
 
-#     # PCA to get the position subspace (hidden_size, num_pcs) (p1, p2)
-#     pca = PCA(n_components=num_pcs).fit(X_all)
-#     return pca.components_.T
+        # concatenate
+        if i == 0:
+            m_all = m
+        else:
+            m_all = np.concatenate((m_all, m), axis=0)
+
+    # PCA to get the position subspace (n_units, n_pcs)
+    pca = PCA(n_components=num_pcs).fit(m_all)
+    
+    return pca.components_.T
 
 
 def map_subspace(X0, pos0, \
                     num_pcs=2, model_2d=False):
     '''
-    get the subspace for one map
+    Get the subspace for one map
+
+    Params
+    ------
     X0 : ndarray, shape (n_obs, hidden_size)
         firing rates associated with a single map
     pos0 : ndarray, shape (n_obs)

@@ -3,6 +3,8 @@ import torch
 import sys
 sys.path.append("../utils/")
 from basic_analysis import tuning_curve_1d
+from dim_alignment import position_subspace, remapping_dim, cosine_sim, proj_aB
+from model_utils import load_model_params, sample_rnn_data, format_rnn_data
 
 from sklearn.utils import check_random_state
 from scipy.ndimage import maximum_filter1d
@@ -11,6 +13,55 @@ from scipy.ndimage import gaussian_filter1d
 '''  '''
 
 ''' to create RNN data analogous to biological data '''
+def get_mouselike_data(data_folder, model_ID):
+    '''
+    Generates RNN data that is "mouse-like" i.e.:
+    - non-negative velocity
+    - many steps
+    - rare remapping
+
+    Returns
+    -------
+    X : ndarray, shape (n_obs, hidden_size)
+        RNN unit activity at each observation
+    pos_targ : ndarray, shape (n_obs,)
+        track positions at each observation (rad)
+    map_targ : ndarray of ints, shape (n_obs,)
+        context at each observation
+    '''
+    # set random seeds
+    NP_SEED = int(model_ID.split('_')[0])
+    TORCH_SEED = int(model_ID.split('_')[1])
+    random_state = np.random.RandomState(NP_SEED)
+    torch.manual_seed(TORCH_SEED)
+
+    # set params
+    model, task_params, rnn_params = load_model_params(data_folder, model_ID)
+    n_batch = 50
+    session_params = {
+        'num_maps': 2,
+        'num_steps': 330,
+        'remap_pulse_duration': 2,
+        'remap_rate': 0.002,
+        'velocity_drift_stddev': 0.1,
+        'velocity_noise_stddev': 0.3}
+
+    # get sample neural activity, position targets, map targets, inputs
+    inp_init, inp_remaps, inp_vel, pos_targets, map_targets = \
+            generate_batch_pos_vel(n_batch, random_state, **session_params)
+    pos_outputs, map_logits, hidden_states = model(inp_init, inp_vel, inp_remaps)
+
+    X = hidden_states.detach().numpy()
+
+    map_targ = map_targets.detach().numpy()
+
+    pos_targ = pos_targets.detach().numpy()
+    pos_targ = (pos_targ + np.pi) % (2 * np.pi) - np.pi
+
+    # trim unfinished traversals and flatten across the batch
+    return format_data(X.copy(), pos_targ.copy(), map_targ.copy())
+
+
 def generate_batch_pos_vel(
         batch_size,
         random_state,
@@ -307,3 +358,65 @@ def fr_by_traversal(X, pos_targ, traversals_by_obs,\
     FR /= (np.max(FR, axis=(0, -1)) + 1e-9)[None, :, None]
 
     return FR
+
+
+''' position and remapping dims alignment to the inputs and outputs '''
+def align_in_out(data_folder, model_IDs):
+    n_models = len(model_IDs)
+
+    # to store the projections
+    remap_dim_angles = {
+        "ctxt_in": np.zeros((n_models, 2)),
+        "ctxt_out": np.zeros((n_models, 2)),
+        "pos_in": np.zeros(n_models), 
+        "pos_out": np.zeros((n_models, 2))
+    }
+    pos_dim_angles = {
+        "ctxt_in": np.zeros((n_models, 2)),
+        "ctxt_out": np.zeros((n_models, 2)),
+        "pos_in": np.zeros(n_models), 
+        "pos_out": np.zeros((n_models, 2))
+    }
+
+    for i, m_id in enumerate(model_IDs):
+        # get the rnn data
+        model, _, _ = load_model_params(data_folder, m_id)
+        inputs, outputs, targets = sample_rnn_data(data_folder, m_id)
+        X, map_targ, pos_targ = format_rnn_data(outputs["hidden_states"], \
+                                                targets["map_targets"], \
+                                                targets["pos_targets"])
+        
+        # split activity by context
+        X0 = X[map_targ==0]
+        X1 = X[map_targ==1]
+
+        # find the remapping dimension
+        remap_dim = remapping_dim(X0, X1)
+        
+        # position-binned firing rates (n_pos_bins, n_units)
+        X0_tc, _ = tuning_curve_1d(X0, pos_targ[map_targ==0], n_pos_bins=250)
+        X1_tc, _ = tuning_curve_1d(X1, pos_targ[map_targ==1], n_pos_bins=250)
+        X_tc = np.stack((X0_tc, X1_tc))
+
+        # find the position subspace
+        pos_subspace = position_subspace(X_tc)
+        
+        # inputs
+        ctxt_inp_w = model.linear_ih.weight[:, 1:]
+        pos_inp_w = model.linear_ih.weight[:, 0]
+        ctxt_inp_w = ctxt_inp_w.detach().numpy() # (hidden_size, n_maps)
+        pos_inp_w = pos_inp_w.detach().numpy() # (hidden_size, n_pos_dim)
+
+        # outputs
+        ctxt_out_w = model.readout_layer_map.weight
+        ctxt_out_w = ctxt_out_w.detach().numpy().T # (hidden_size, n_maps)
+        pos_out_w = model.readout_layer_pos.weight
+        pos_out_w = pos_out_w.detach().numpy().T # (hidden_size, n_pos_dim * 2)
+        
+        # find the alignments
+        all_weights = [ctxt_inp_w, ctxt_out_w, pos_inp_w, pos_out_w]
+        for label, w in zip(remap_dim_angles.keys(), all_weights):
+            remap_dim_angles[label][i] = np.abs(cosine_sim(remap_dim, w))
+            pos_dim_angles[label][i] = np.abs(proj_aB(w, pos_subspace))
+
+    return remap_dim_angles, pos_dim_angles

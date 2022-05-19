@@ -8,6 +8,8 @@ from mpl_toolkits.mplot3d import Axes3D
 from plot_utils import simple_cmap, ring_colormap
 from model_utils import sample_rnn_data, format_rnn_data
 from basic_analysis import tuning_curve_1d, compute_misalignment
+import analysis_rnn as rnn
+from analysis_neuro import spatial_similarity
 
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
@@ -115,7 +117,7 @@ def plot_c(d, cell_ID, FR_0, FR_1, FR_0_sem, FR_1_sem, binned_pos):
 
     # plot similarity matrix
     ax1 = plt.subplot(gs[:-2, 3:])
-    im = ax1.imshow(sim, clim=[0.1, 0.7], aspect='auto', cmap='Greys')
+    im = ax1.imshow(sim, clim=[0, 1], aspect='auto', cmap='viridis')
     ax1.set_title("network", fontsize=title_size, pad=3)
     ax1.tick_params(labelleft=False, which='major', 
                     labelsize=tick_label, pad=0.5)
@@ -360,7 +362,7 @@ def plot_f(pos_targets, pos_outputs, map_logits):
     return f, gs
 
 
-def plot_g(firing_rates, network_similarity, map_idx, ex_units):
+def plot_g(data_folder, model_ID):
     '''
     Replicate fig. 1b for 6 example model units
 
@@ -374,6 +376,33 @@ def plot_g(firing_rates, network_similarity, map_idx, ex_units):
         which map was predominant on each traversal
         1, predominant map; 0, other map(s)
     '''
+    # generate a "mouse-like" session
+    X, pos_targ, map_targ = rnn.get_mouselike_data(data_folder, model_ID)
+
+    # label each observation by traversal number
+    traversals_by_obs = rnn.traversal_num(pos_targ)
+    print(f'{np.max(traversals_by_obs)+1} total track traversals')
+
+    # find the predominant context for each traversal
+    map_idx = rnn.map_by_traversal(map_targ, traversals_by_obs)
+    n_remaps = np.sum(np.abs(np.diff(map_targ)))
+    print(f'{n_remaps} total remapping events')
+
+    # get the position-binned firing rates for each traversal
+    firing_rates = rnn.fr_by_traversal(X, pos_targ, \
+                                        traversals_by_obs, n_pos_bins=50)
+
+    # calculate the trial-trial spatial similarity
+    network_similarity = spatial_similarity(firing_rates.copy())
+
+    # choose example units
+    n_units = X.shape[-1]
+    n_ex_units = 5
+    possible_units = np.arange(n_units)
+    possible_units = \
+            possible_units[np.max(np.mean(firing_rates, axis=0), axis=1) > 0.3]
+    ex_units = np.random.choice(possible_units, n_ex_units, replace=False)
+
     # data params
     n_ex_units = ex_units.shape[0]
     (n_traversals, n_units, n_pos_bins) = firing_rates.shape
@@ -466,7 +495,7 @@ def plot_g(firing_rates, network_similarity, map_idx, ex_units):
     im = ax2.imshow(network_similarity, \
                     clim=[0.1, 0.7], \
                     aspect='auto', \
-                    cmap='Greys')
+                    cmap='viridis')
     ax2.set_title("network", fontsize=title_size, pad=3)
     ax2.tick_params(labelleft=False, which='major', 
                     labelsize=tick_label, pad=0.5)
@@ -597,7 +626,7 @@ def plot_j(data_folder, model_IDs, \
     hidden_size = X.shape[-1]
 
     # figure params
-    f = plt.figure(figsize=(1.5, 0.8))
+    f = plt.figure(figsize=(0.7, 0.4))
     DOT_SIZE = 5
     DOT_LW = 0.2
     CUM_LW = 1
@@ -661,79 +690,149 @@ def plot_j(data_folder, model_IDs, \
     ax0.spines['right'].set_visible(False)
     ax0.spines['top'].set_visible(False)
     ax0.spines['left'].set_bounds(0, 1)
-    ax0.spines['bottom'].set_bounds(1, hidden_size)
+    ax0.spines['bottom'].set_bounds(-5, hidden_size)
     ax0.tick_params(which='major', labelsize=tick_label, pad=0.5)
     ax0.set_xlim((-5, hidden_size+5))
     ax0.set_xticks([1, hidden_size/2, hidden_size])
-    ax0.set_ylim((-0.05, 1.05))
+    ax0.set_ylim((0, 1.05))
     ax0.set_yticks([0, 0.5, 1])
-    ax0.set_title('both maps',
-                  fontsize=title_size, pad=4)
+    ax0.set_yticklabels([0, 0.5, 1])
+    # ax0.set_title('both maps',
+    #               fontsize=title_size, pad=4)
     ax0.set_xlabel('dimension', fontsize=axis_label, labelpad=1)
-    ax0.set_ylabel('variance\nexplained', 
+    ax0.set_ylabel('var. exp.', 
                    fontsize=axis_label, labelpad=1)
 
-    # map 1
-    avg_var_0 = np.mean(all_var_0, axis=0)
-    ax1 = plt.axes([0.2, 0.25, 0.35, 0.4])
-    ax1.plot(np.arange(hidden_size) + 1,
-             avg_var_0,
-             c='k', lw=CUM_LW/1.5,
-             zorder=0)
-    ax1.scatter(np.arange(top_num_1, hidden_size) + 1,
-                avg_var_0[top_num_1:],
-                c='k', s=DOT_SIZE-3, lw=0,
-                zorder=1)
-    ax1.scatter(np.arange(top_num_1) + 1,
-                avg_var_0[:top_num_1],
-                facecolors='r', edgecolors='k',
-                s=DOT_SIZE-2, lw=DOT_LW,
-                zorder=2)
+    # # map 1
+    # avg_var_0 = np.mean(all_var_0, axis=0)
+    # ax1 = plt.axes([0.2, 0.25, 0.35, 0.4])
+    # ax1.plot(np.arange(hidden_size) + 1,
+    #          avg_var_0,
+    #          c='k', lw=CUM_LW/1.5,
+    #          zorder=0)
+    # ax1.scatter(np.arange(top_num_1, hidden_size) + 1,
+    #             avg_var_0[top_num_1:],
+    #             c='k', s=DOT_SIZE-3, lw=0,
+    #             zorder=1)
+    # ax1.scatter(np.arange(top_num_1) + 1,
+    #             avg_var_0[:top_num_1],
+    #             facecolors='r', edgecolors='k',
+    #             s=DOT_SIZE-2, lw=DOT_LW,
+    #             zorder=2)
 
-    # ticks and labels
-    ax1.spines['right'].set_visible(False)
-    ax1.spines['top'].set_visible(False)
-    ax1.spines['left'].set_bounds(0, 1)
-    ax1.spines['bottom'].set_bounds(1, hidden_size)
-    ax1.tick_params(which='major', labelsize=tick_label-1, pad=0.5)
-    ax1.set_xlim((-7, hidden_size+5))
-    ax1.set_ylim((-0.05, 1.05))
-    ax1.set_xticks([1, hidden_size])
-    ax1.set_yticks([0, 1])
-    ax1.set_title('map 1',
-                  fontsize=axis_label, pad=3)
+    # # ticks and labels
+    # ax1.spines['right'].set_visible(False)
+    # ax1.spines['top'].set_visible(False)
+    # ax1.spines['left'].set_bounds(0, 1)
+    # ax1.spines['bottom'].set_bounds(1, hidden_size)
+    # ax1.tick_params(which='major', labelsize=tick_label-1, pad=0.5)
+    # ax1.set_xlim((-7, hidden_size+5))
+    # ax1.set_ylim((-0.05, 1.05))
+    # ax1.set_xticks([1, hidden_size])
+    # ax1.set_yticks([0, 1])
+    # ax1.set_title('map 1',
+    #               fontsize=axis_label, pad=3)
 
-    # map 2
-    avg_var_1 = np.mean(all_var_1, axis=0)
-    ax2 = plt.axes([0.63, 0.25, 0.35, 0.4])
-    ax2.plot(np.arange(hidden_size) + 1,
-             avg_var_1,
-             c='k', lw=CUM_LW/1.5,
-             zorder=0)
-    ax2.scatter(np.arange(top_num_1, hidden_size) + 1,
-                avg_var_1[top_num_1:],
-                c='k', s=DOT_SIZE-3, lw=0,
-                zorder=1)
-    ax2.scatter(np.arange(top_num_1) + 1,
-                avg_var_1[:top_num_1],
-                facecolors='r', edgecolors='k',
-                s=DOT_SIZE-2, lw=DOT_LW,
-                zorder=2, label=f'{top_num_1} PCs')
+    # # map 2
+    # avg_var_1 = np.mean(all_var_1, axis=0)
+    # ax2 = plt.axes([0.63, 0.25, 0.35, 0.4])
+    # ax2.plot(np.arange(hidden_size) + 1,
+    #          avg_var_1,
+    #          c='k', lw=CUM_LW/1.5,
+    #          zorder=0)
+    # ax2.scatter(np.arange(top_num_1, hidden_size) + 1,
+    #             avg_var_1[top_num_1:],
+    #             c='k', s=DOT_SIZE-3, lw=0,
+    #             zorder=1)
+    # ax2.scatter(np.arange(top_num_1) + 1,
+    #             avg_var_1[:top_num_1],
+    #             facecolors='r', edgecolors='k',
+    #             s=DOT_SIZE-2, lw=DOT_LW,
+    #             zorder=2, label=f'{top_num_1} PCs')
 
-    # ticks and labels
-    ax2.spines['right'].set_visible(False)
-    ax2.spines['top'].set_visible(False)
-    ax2.spines['left'].set_bounds(0, 1)
-    ax2.spines['bottom'].set_bounds(1, hidden_size)
-    ax2.tick_params(labelleft=False, which='major', labelsize=tick_label-1, pad=0.5)
-    ax2.set_xlim((-7, hidden_size+5))
-    ax2.set_ylim((-0.05, 1.05))
-    ax2.set_xticks([1, hidden_size])
-    ax2.set_yticks([0, 1])
-    ax2.set_title('map 2',
-                  fontsize=axis_label, pad=3)
+    # # ticks and labels
+    # ax2.spines['right'].set_visible(False)
+    # ax2.spines['top'].set_visible(False)
+    # ax2.spines['left'].set_bounds(0, 1)
+    # ax2.spines['bottom'].set_bounds(1, hidden_size)
+    # ax2.tick_params(labelleft=False, which='major', labelsize=tick_label-1, pad=0.5)
+    # ax2.set_xlim((-7, hidden_size+5))
+    # ax2.set_ylim((-0.05, 1.05))
+    # ax2.set_xticks([1, hidden_size])
+    # ax2.set_yticks([0, 1])
+    # ax2.set_title('map 2',
+    #               fontsize=axis_label, pad=3)
 
-    return f, [ax0, ax1, ax2]
+    return f, ax0 # [ax0, ax1, ax2]
+
+
+def plot_k(data_folder, model_IDs):
+    '''
+    Alignment of the input and output weights to the
+    remapping dimension and position subspace
+    '''
+    # project the input and output weights onto each dimension
+    remap_dim_angles, pos_dim_angles = rnn.align_in_out(data_folder, model_IDs)
+
+    # get the means and standard deviation
+    remap_dim_means = np.asarray([])
+    remap_dim_sems = np.asarray([])
+    pos_dim_means = np.asarray([])
+    pos_dim_sems = np.asarray([])
+    for label in remap_dim_angles.keys():
+        remap_dim_means = np.append(remap_dim_means, \
+                                    np.mean(remap_dim_angles[label]))
+        remap_dim_sems = np.append(remap_dim_sems, \
+                                    stats.tstd(remap_dim_angles[label].ravel()))
+        pos_dim_means = np.append(pos_dim_means, \
+                                    np.mean(pos_dim_angles[label]))
+        pos_dim_sems = np.append(pos_dim_sems, \
+                                    stats.tstd(pos_dim_angles[label].ravel()))
+
+    # fig params
+    f, ax = plt.subplots(1, 2, figsize=(2, 1))
+    bar_colors = ['xkcd:dark gray', c1, pos_col, est_col]
+    ERR_LW = 1.5
+    xcoords = [1, 2, 4, 5]
+        
+    # plot projection onto remap dim
+    ylims = ax[0].get_ylim()
+    err_dict = {'ecolor': 'k', 'elinewidth': ERR_LW}
+    ax[0].bar(xcoords, remap_dim_means,
+              width=0.8, bottom=ylims[0],
+              color=bar_colors, alpha=1, edgecolor='k',
+              yerr=remap_dim_sems, error_kw=err_dict)
+
+    # plot projection onto position subspace
+    err_dict = {'ecolor': 'k', 'elinewidth': ERR_LW}
+    ax[1].bar(xcoords, pos_dim_means,
+              width=0.8, bottom=ylims[0],
+              color=bar_colors, alpha=1, edgecolor='k',
+              yerr=pos_dim_sems, error_kw=err_dict) 
+
+    # ticks and lims
+    for i in range(2):
+        ax[i].set_xticks([])
+        ax[i].set_yticks(np.arange(0, 1.2, 0.5))
+        ax[i].spines['right'].set_visible(False)
+        ax[i].spines['top'].set_visible(False)
+        ax[i].spines['left'].set_bounds(0, 1)
+        ax[i].spines['bottom'].set_bounds(xcoords[0] - 0.5,
+                                          xcoords[-1] + 0.5)
+        ax[i].set_xlim([xcoords[0] - 0.7,
+                        xcoords[-1] + 0.7])
+        ax[i].set_ylim([0, 1])
+
+    # labels
+    ax[0].tick_params(labelbottom=False, which='major',
+                      labelsize=tick_label, pad=0.5)
+    ax[1].tick_params(labelbottom=False, labelleft=False,
+                      which='major', labelsize=tick_label, pad=0.5)
+    ax[0].set_ylabel('cosine sim.', fontsize=axis_label, labelpad=1)
+    ax[0].set_title('remap dim.', fontsize=axis_label, pad=3)
+    ax[1].set_title('pos. dim.', fontsize=axis_label, pad=3)
+
+    return f, ax
 
 
 ''' POSSIBLE SUPPLEMENTAL FIGS '''
@@ -834,23 +933,23 @@ def plot_supp_2(data_folder, model_IDs):
     print(f'sem misalignment = {stats.sem(alignment_scores):.2}')
 
     # fig params 
-    f, ax = plt.subplots(1, 1, figsize=(1.8, 0.5))
+    f, ax = plt.subplots(1, 1, figsize=(1, 0.5))
     BAR_LW = 1
     THRESH_LW = 2
 
     ax.hist(
         alignment_scores,
-        np.linspace(0.0, 1.0, 50),
+        np.linspace(0.0, 1.0, 30),
         color="gray", lw=BAR_LW, edgecolor="k")
-    ax.set_xlabel("manifold misalignment", fontsize=axis_label, labelpad=1)
+    ax.set_xlabel("misalignment", fontsize=axis_label, labelpad=1)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    ax.plot([1, 1], [0, 3], dashes=[1, 1], lw=THRESH_LW, color="k")
-    ax.text(1, 3.2, "shuff\nthresh", fontsize=tick_label,\
+    ax.plot([1, 1], [0, 3.3], dashes=[1, 1], lw=THRESH_LW, color="k")
+    ax.text(1, 3.5, "shuff\nthresh", fontsize=tick_label,\
             horizontalalignment='center')
 
     ax.set_xlim([0, 1.2])
-    ax.set_xticks(np.arange(0, 1.4, 0.2))
+    ax.set_xticks(np.arange(0, 1.4, 0.6))
     ax.set_yticks([0, 3, 6])
     ax.tick_params(which='major', labelsize=tick_label, pad=0.5)
     ax.spines["left"].set_bounds(0, 6)
