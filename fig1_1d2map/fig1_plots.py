@@ -117,7 +117,7 @@ def plot_c(d, cell_ID, FR_0, FR_1, FR_0_sem, FR_1_sem, binned_pos):
 
     # plot similarity matrix
     ax1 = plt.subplot(gs[:-2, 3:])
-    im = ax1.imshow(sim, clim=[0, 1], aspect='auto', cmap='viridis')
+    im = ax1.imshow(sim, clim=[0, 1], aspect='auto', cmap='gist_yarg')
     ax1.set_title("network", fontsize=title_size, pad=3)
     ax1.tick_params(labelleft=False, which='major', 
                     labelsize=tick_label, pad=0.5)
@@ -495,7 +495,7 @@ def plot_g(data_folder, model_ID):
     im = ax2.imshow(network_similarity, \
                     clim=[0.1, 0.7], \
                     aspect='auto', \
-                    cmap='viridis')
+                    cmap='gist_yarg')
     ax2.set_title("network", fontsize=title_size, pad=3)
     ax2.tick_params(labelleft=False, which='major', 
                     labelsize=tick_label, pad=0.5)
