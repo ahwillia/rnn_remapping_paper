@@ -597,7 +597,7 @@ def plot_h(X, pos_targets,
     return fig, ax
 
 
-def plot_j(data_folder, model_IDs, \
+def plot_i(data_folder, model_IDs, \
             top_num=4, top_num_1=3, \
             most_var_thresh=0.90):
     '''
@@ -766,6 +766,60 @@ def plot_j(data_folder, model_IDs, \
     return f, ax0 # [ax0, ax1, ax2]
 
 
+def plot_j(data_folder, model_IDs):
+    '''
+    Misalignment scores for manifolds from all trained models
+    Scores are normalized:
+        1 = perfectly aligned
+        0 = 2.5% of shuffle (i.e., p = 0.025)
+    '''
+    # data params
+    n_models = len(model_IDs)
+    alignment_scores = np.asarray([])
+    for i, m_id in enumerate(model_IDs):
+        # get the rnn data
+        inputs, outputs, targets = sample_rnn_data(data_folder, m_id)
+        X, map_targ, pos_targ = format_rnn_data(outputs["hidden_states"],\
+                                                targets["map_targets"],\
+                                                targets["pos_targets"])
+        
+        # get the manifolds for each map and compute misalignment
+        X0_binned, binned_pos = tuning_curve_1d(X[map_targ==0],\
+                                                pos_targ[map_targ==0])
+        X1_binned, _ = tuning_curve_1d(X[map_targ==1],\
+                                        pos_targ[map_targ==1])
+        norm_align, _, _, _ = compute_misalignment(X0_binned, X1_binned)
+        
+        alignment_scores = np.append(alignment_scores, norm_align)
+
+    print(f'mean alignment = {np.mean(alignment_scores):.2}')
+    print(f'sem misalignment = {stats.sem(alignment_scores):.2}')
+
+    # fig params 
+    f, ax = plt.subplots(1, 1, figsize=(1, 0.5))
+    BAR_LW = 1
+    THRESH_LW = 2
+
+    ax.hist(
+        alignment_scores,
+        np.linspace(0.0, 1.0, 30),
+        color="gray", lw=BAR_LW, edgecolor="k")
+    ax.set_xlabel("misalignment", fontsize=axis_label, labelpad=1)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.plot([1, 1], [0, 3.3], dashes=[1, 1], lw=THRESH_LW, color="k")
+    ax.text(1, 3.5, "shuff\nthresh", fontsize=tick_label,\
+            horizontalalignment='center')
+
+    ax.set_xlim([0, 1.2])
+    ax.set_xticks(np.arange(0, 1.4, 0.6))
+    ax.set_yticks([0, 3, 6])
+    ax.tick_params(which='major', labelsize=tick_label, pad=0.5)
+    ax.spines["left"].set_bounds(0, 6)
+    ax.set_ylabel("count", fontsize=axis_label, labelpad=1)
+
+    return f, ax
+
 def plot_k(data_folder, model_IDs):
     '''
     Alignment of the input and output weights to the
@@ -829,8 +883,8 @@ def plot_k(data_folder, model_IDs):
     ax[1].tick_params(labelbottom=False, labelleft=False,
                       which='major', labelsize=tick_label, pad=0.5)
     ax[0].set_ylabel('cosine sim.', fontsize=axis_label, labelpad=1)
-    ax[0].set_title('remap dim.', fontsize=axis_label, pad=3)
-    ax[1].set_title('pos. dim.', fontsize=axis_label, pad=3)
+    ax[0].set_title('context\ntuning dim.', fontsize=axis_label, pad=3)
+    ax[1].set_title('position\ntuning dim.', fontsize=axis_label, pad=3)
 
     return f, ax
 
@@ -902,57 +956,73 @@ def plot_supp_1(data_folder, model_IDs):
 
     return f, ax
 
-
-def plot_supp_2(data_folder, model_IDs):
+def plot_k_alt(data_folder, model_IDs):
     '''
-    Misalignment scores for manifolds from all trained models
-    Scores are normalized:
-        1 = perfectly aligned
-        0 = 2.5% of shuffle (i.e., p = 0.025)
+    Alignment of the input and output weights to the
+    remapping dimension and position subspace
     '''
-    # data params
-    n_models = len(model_IDs)
-    alignment_scores = np.asarray([])
-    for i, m_id in enumerate(model_IDs):
-        # get the rnn data
-        inputs, outputs, targets = sample_rnn_data(data_folder, m_id)
-        X, map_targ, pos_targ = format_rnn_data(outputs["hidden_states"],\
-                                                targets["map_targets"],\
-                                                targets["pos_targets"])
+    # project the input and output weights onto each dimension
+    remap_dim_angles, pos_dim_angles = rnn.align_in_out(data_folder, model_IDs)
+
+    # get the means and standard deviation
+    remap_dim_means = np.asarray([])
+    remap_dim_sems = np.asarray([])
+    pos_dim_means = np.asarray([])
+    pos_dim_sems = np.asarray([])
+    for label in remap_dim_angles.keys():
+        remap_dim_means = np.append(remap_dim_means, \
+                                    np.mean(remap_dim_angles[label]))
+        remap_dim_sems = np.append(remap_dim_sems, \
+                                    stats.tstd(remap_dim_angles[label].ravel()))
+        pos_dim_means = np.append(pos_dim_means, \
+                                    np.mean(pos_dim_angles[label]))
+        pos_dim_sems = np.append(pos_dim_sems, \
+                                    stats.tstd(pos_dim_angles[label].ravel()))
+
+    # fig params
+    f, ax = plt.subplots(2, 1, figsize=(1, 2))
+    plt.subplots_adjust(hspace=0.5)
+    bar_colors = ['xkcd:dark gray', c1, pos_col, est_col]
+    ERR_LW = 1.5
+    xcoords = [1, 2, 4, 5]
         
-        # get the manifolds for each map and compute misalignment
-        X0_binned, binned_pos = tuning_curve_1d(X[map_targ==0],\
-                                                pos_targ[map_targ==0])
-        X1_binned, _ = tuning_curve_1d(X[map_targ==1],\
-                                        pos_targ[map_targ==1])
-        norm_align, _, _, _ = compute_misalignment(X0_binned, X1_binned)
-        
-        alignment_scores = np.append(alignment_scores, norm_align)
+    # plot projection onto remap dim
+    ylims = ax[0].get_ylim()
+    err_dict = {'ecolor': 'k', 'elinewidth': ERR_LW}
+    ax[0].bar(xcoords, remap_dim_means,
+              width=0.8, bottom=ylims[0],
+              color=bar_colors, alpha=1, edgecolor='k',
+              yerr=remap_dim_sems, error_kw=err_dict)
 
-    print(f'mean alignment = {np.mean(alignment_scores):.2}')
-    print(f'sem misalignment = {stats.sem(alignment_scores):.2}')
+    # plot projection onto position subspace
+    err_dict = {'ecolor': 'k', 'elinewidth': ERR_LW}
+    ax[1].bar(xcoords, pos_dim_means,
+              width=0.8, bottom=ylims[0],
+              color=bar_colors, alpha=1, edgecolor='k',
+              yerr=pos_dim_sems, error_kw=err_dict) 
 
-    # fig params 
-    f, ax = plt.subplots(1, 1, figsize=(1, 0.5))
-    BAR_LW = 1
-    THRESH_LW = 2
+    # ticks and lims
+    for i in range(2):
+        ax[i].set_xticks([])
+        ax[i].set_yticks(np.arange(0, 1.2, 0.5))
+        ax[i].spines['right'].set_visible(False)
+        ax[i].spines['top'].set_visible(False)
+        ax[i].spines['left'].set_bounds(0, 1)
+        ax[i].spines['bottom'].set_bounds(xcoords[0] - 0.5,
+                                          xcoords[-1] + 0.5)
+        ax[i].set_xlim([xcoords[0] - 0.7,
+                        xcoords[-1] + 0.7])
+        ax[i].set_ylim([0, 1])
 
-    ax.hist(
-        alignment_scores,
-        np.linspace(0.0, 1.0, 30),
-        color="gray", lw=BAR_LW, edgecolor="k")
-    ax.set_xlabel("misalignment", fontsize=axis_label, labelpad=1)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.plot([1, 1], [0, 3.3], dashes=[1, 1], lw=THRESH_LW, color="k")
-    ax.text(1, 3.5, "shuff\nthresh", fontsize=tick_label,\
-            horizontalalignment='center')
-
-    ax.set_xlim([0, 1.2])
-    ax.set_xticks(np.arange(0, 1.4, 0.6))
-    ax.set_yticks([0, 3, 6])
-    ax.tick_params(which='major', labelsize=tick_label, pad=0.5)
-    ax.spines["left"].set_bounds(0, 6)
-    ax.set_ylabel("count", fontsize=axis_label, labelpad=1)
+    # labels
+    ax[0].tick_params(labelbottom=False, which='major',
+                        labelsize=tick_label, pad=0.5)
+    ax[1].tick_params(labelbottom=False, which='major',
+                        labelsize=tick_label, pad=0.5)
+    ax[1].set_ylabel('cosine similarity',
+                        horizontalalignment='left', x=0.3,
+                        fontsize=axis_label, labelpad=1)
+    ax[0].set_title('context tuning dim.', fontsize=axis_label, pad=5)
+    ax[1].set_title('pos. tuning dim.', fontsize=axis_label, pad=5)
 
     return f, ax
