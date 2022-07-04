@@ -447,7 +447,7 @@ def plot_supp_3(data_folder, model_IDs, \
 
         # PCA on each manifold
         for j in range(n_maps):
-            X_map = X[map_targ==i]
+            X_map = X[map_targ==j]
             pca_0 = PCA().fit(X_map)
             var_0 = pca_0.explained_variance_
             pct_var_0 = (var_0 / np.sum(var_0))

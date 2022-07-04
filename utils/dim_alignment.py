@@ -1,6 +1,6 @@
 import numpy as np
 from sklearn.decomposition import PCA
-# from procrustes import tuning_curve_1d, tuning_curve_2d
+from basic_analysis import tuning_curve_1d#, tuning_curve_2d
 
 def cosine_sim(a, b):
     norm_a = np.linalg.norm(a, axis=0)
@@ -88,11 +88,11 @@ def map_subspace(X0, pos0, \
         was the model trained on the 2D navigation task
     '''
     # position-binned firing rates (n_pos_bins, hidden_size)
-    if model_2d:
-        tc_X0 = tuning_curve_2d(X0, pos0[:, 0], pos0[:, 1])
-        X0_tc = tc_X0.reshape(-1, hidden_size)
-    else:
-        X0_tc = tuning_curve_1d(X0, pos0, n_bins=250)
+    # if model_2d:
+    #     tc_X0 = tuning_curve_2d(X0, pos0[:, 0], pos0[:, 1])
+    #     X0_tc = tc_X0.reshape(-1, hidden_size)
+    # else:
+    X0_tc, _ = tuning_curve_1d(X0, pos0, n_pos_bins=250)
 
     # mean-center, normalize
     m1 = X0_tc - np.mean(X0_tc, axis=0, keepdims=True)
