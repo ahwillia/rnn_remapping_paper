@@ -48,6 +48,87 @@ def tuning_curve_1d(X, pos,\
     return tc, binned_pos
 
 
+def tuning_curve_2d(X, x_pos, y_pos, \
+                    n_pos_bins=80, pos_min=-np.pi, pos_max=np.pi, \
+                    smooth=False, return_pos=False):
+    '''
+    Compute a 2D tuning curve.
+    Assumes a square environment (xdims = ydims)
+
+    Based on ln-model-of-mec-neurons/compute_2d_tuning_curve.m by Kiah Hardcastle
+    
+    Params
+    ------
+    X : ndarray, shape (n_obs, n_units)
+        firing rate of each cell at each observation
+    x_pos : ndarray, shape (n_obs, )
+        x-axis positions
+    y_pos : ndarray, shape (n_obs, )
+        y-axis positions
+    
+    Returns
+    -------
+    tc : ndarray, shape (y_bins, x_bins, n_units)
+        avg firing rate in each xy position bin
+    x_centers, y_centers : ndarray (n_pos_bins, n_pos_bins)
+        center of each position bin
+        organized in terms of x or y
+    '''
+    pos_bins = np.linspace(pos_min, pos_max, n_pos_bins+1)   
+    n_units = X.shape[1]
+    
+    # fill in the average firing rates for each pos bin
+    tc = np.zeros((n_pos_bins, n_pos_bins, n_units))
+    # in y bin
+    for i in range(n_pos_bins):
+        y_start = pos_bins[i]
+        y_stop = pos_bins[i+1]
+        if i == n_pos_bins:
+            y_idx = (y_pos >= y_start) & (y_pos <= y_stop)
+        else:
+            y_idx = (y_pos >= y_start) & (y_pos < y_stop)
+
+        # in x bin
+        for j in range(n_pos_bins):
+            x_start = pos_bins[j]
+            x_stop = pos_bins[j+1]
+            if j == n_pos_bins:
+                x_idx = (x_pos >= x_start) & (x_pos <= x_stop)
+            else:
+                x_idx = (x_pos >= x_start) & (x_pos < x_stop)
+                
+            tc[i, j] = np.mean(X[x_idx & y_idx], axis=0)
+                
+    # fill in nans with neighboring values
+    for n in range(n_units):
+        nan_idx = np.isnan(tc[:, :, n])
+        [i_idx, j_idx] = np.where(nan_idx)  
+        for i, j in zip(i_idx, j_idx):
+            try:
+                right = tc[i, j+1]
+            except:
+                right = tc[i, 0]
+            left = tc[i, j-1]
+            down = tc[i-1, j]
+            try:
+                up = tc[i+1, j]
+            except:
+                up = tc[0, j]
+            tc[i, j] = np.nanmean((right, left, up, down))
+    
+    # smooth the firing rates over position
+    if smooth:
+        tc = gaussian_filter1d(tc, 2, axis=0, mode='wrap')
+        tc = gaussian_filter1d(tc, 2, axis=1, mode='wrap')
+
+    if return_pos:
+        pos_avg = np.mean((pos_bins[:-1], pos_bins[1:]), axis=0)
+        x_centers, y_centers = np.meshgrid(pos_avg, pos_avg)
+        return tc, x_centers, y_centers
+    else:
+        return tc
+
+
 ''' MANIFOLD GEOMETRY AND ALIGNMENT '''
 def compute_misalignment(x0, x1):
     '''

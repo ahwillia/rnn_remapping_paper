@@ -39,11 +39,6 @@ def plot_a1(inp_vel, inp_remaps):
 
     Params
     ------
-    inp_vel : ndarray, shape (num_steps, 1)
-        input velocity for an example trial
-    inp_remaps : ndarray, shape (num_steps, num_maps)
-        binary context cues for an example trial
-
     inp_vel : torch.tensor, shape (num_steps, batch_size)
         velocity inputs from generate_batch()
     inp_remaps : torch.tensor, shape (num_steps, batch_size, num_maps)
@@ -156,9 +151,9 @@ def plot_b(X, map_targ, pos_targ, n_ex_units=6):
     ------
     X : ndarray, shape (n_obs, hidden_size)
         RNN unit activity at each observation
-    map_targs : ndarray, shape(n_obs,)
+    map_targ : ndarray, shape(n_obs,)
         true context at each observation
-    pos_targs : ndarray, shape(n_obs,)
+    pos_targ : ndarray, shape(n_obs,)
         true positions at each observation
     n_ex_units : int
         number of example units to plot
@@ -367,7 +362,6 @@ def plot_d(data_folder, model_IDs, \
         X, map_targ, pos_targ = format_rnn_data(outputs["hidden_states"],\
                                                 targets["map_targets"],\
                                                 targets["pos_targets"])
-        hidden_size = X.shape[-1]
 
         # PCA on all manifolds
         pca = PCA().fit(X)
