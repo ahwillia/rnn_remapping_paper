@@ -8,7 +8,7 @@ from scipy.special import softmax
 
 
 class RemapManualRNN(nn.Module):
-    def __init__(self, hidden_size, num_maps, nonlinearity):
+    def __init__(self, hidden_size, num_maps, nonlinearity, num_spatial_dimensions):
         """
         Parameters
         ----------
@@ -22,6 +22,7 @@ class RemapManualRNN(nn.Module):
         self.hidden_size = hidden_size
         self.nonlinearity = nonlinearity
         self.num_maps = num_maps
+        self.num_spatial_dimensions = num_spatial_dimensions
 
         if nonlinearity == "linear":
             self._f = nn.Identity()
@@ -32,13 +33,13 @@ class RemapManualRNN(nn.Module):
         else:
             raise ValueError("Nonlinearity not recognized.")
 
-        self.linear_initialize = nn.Linear(2, hidden_size)
+        self.linear_initialize = nn.Linear(2 * num_spatial_dimensions, hidden_size)
 
-        self.linear_ih = nn.Linear(1 + num_maps, hidden_size, bias=False)
+        self.linear_ih = nn.Linear(num_spatial_dimensions + num_maps, hidden_size, bias=False)
         self.linear_hh = nn.Linear(hidden_size, hidden_size)
 
         self.readout_layer_map = nn.Linear(hidden_size, num_maps)
-        self.readout_layer_pos = nn.Linear(hidden_size, 2)
+        self.readout_layer_pos = nn.Linear(hidden_size, 2 * num_spatial_dimensions)
 
     def forward(self, inp_init, inp_vel, inp_remaps):
         """
@@ -52,7 +53,7 @@ class RemapManualRNN(nn.Module):
           map_logits : n_steps x n_batch x num_maps
         """
 
-        assert inp_vel.shape[-1] == 1
+        assert inp_vel.shape[-1] == self.num_spatial_dimensions
         assert inp_remaps.shape[-1] == self.num_maps
 
         # Initial states, (n_batch, hidden_size).
@@ -62,7 +63,7 @@ class RemapManualRNN(nn.Module):
         inputs = torch.cat((inp_vel, inp_remaps), axis=-1)
 
         # RNN outputs.
-        pos_outputs = torch.empty((inputs.shape[0], inputs.shape[1], 2))
+        pos_outputs = torch.empty((inputs.shape[0], inputs.shape[1], 2 * self.num_spatial_dimensions))
         map_outputs = torch.empty((inputs.shape[0], inputs.shape[1], self.num_maps))
 
         # RNN hidden states, (n_steps, n_batch, hidden_size).

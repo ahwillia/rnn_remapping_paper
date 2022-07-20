@@ -6,6 +6,7 @@ import torch
 from torch import nn
 from torch.functional import F
 from time import time
+import itertools
 
 
 class RemapTaskLoss(nn.Module):
@@ -26,7 +27,7 @@ class RemapTaskLoss(nn.Module):
         """
         Parameters
         ----------
-        pos_outputs : float, shape == (num_steps, batch_size, 2)
+        pos_outputs : float, shape == (num_steps, batch_size, 2 * num_spatial_dimensions)
             Output of RNN, predicting position. The two outputs specify
             cos(theta) and sin(theta) of the angular position.
 
@@ -53,19 +54,24 @@ class RemapTaskLoss(nn.Module):
 
         # Compute map decoding loss
         num_maps = map_logits.shape[-1]
+        num_spatial_dimensions = pos_outputs.shape[-1] // 2
         map_loss = self.ce_loss(
             map_logits.reshape(-1, num_maps),
             map_targets.reshape(-1)
         )
 
         # Flatten batch dimension
-        pos_flat = pos_targets.reshape(-1, 1)      # shape == (batch_size * num_steps, 1)
-        pos_out_flat = pos_outputs.reshape(-1, 2)  # shape == (batch_size * num_steps, 2)
+        p = pos_targets.reshape(-1, num_spatial_dimensions)                 # shape == (batch_size * num_steps, 1)
+        pos_out_flat = pos_outputs.reshape(-1, 2 * num_spatial_dimensions)  # shape == (batch_size * num_steps, 2)
 
         # Compute position decoding loss
         pos_loss = F.mse_loss(
             pos_out_flat,
-            torch.cat((torch.cos(pos_flat), torch.sin(pos_flat)), axis=1)
+            torch.stack(
+                list(itertools.chain(
+                    *[[torch.cos(p[:, i]), torch.sin(p[:, i])] for i in range(num_spatial_dimensions)]
+                )), axis=1
+            )
         )
 
         # Compute total loss.
@@ -152,6 +158,7 @@ def generate_trial(
         velocity_drift_stddev=0.01,
         velocity_noise_stddev=0.03,
         remap_pulse_duration=5,
+        num_spatial_dimensions=1,
     ):
     """
     Parameters
@@ -180,19 +187,16 @@ def generate_trial(
     num_remaps = np.clip(rs.poisson(num_steps * remap_rate), 0, len(possible_remap_times))
 
     # Sample initial position
-    initial_position = rs.uniform(low=-np.pi, high=np.pi)
-    inp_init = np.array([
-        np.cos(initial_position),
-        np.sin(initial_position)
-    ])
+    initial_position = rs.uniform(low=-np.pi, high=np.pi, size=num_spatial_dimensions)
+    inp_init = np.array([[np.cos(p), np.sin(p)] for p in initial_position]).ravel()
 
     # Sample velocity trace.
-    v_mean = velocity_drift_stddev * rs.randn()
-    v_noise = velocity_noise_stddev * rs.randn(num_steps)
-    inp_vel = (v_mean + v_noise)[:, None]
+    v_mean = velocity_drift_stddev * rs.randn(1, num_spatial_dimensions)
+    v_noise = velocity_noise_stddev * rs.randn(num_steps, num_spatial_dimensions)
+    inp_vel = v_mean + v_noise
 
     # Compute position by integrating velocity.
-    pos_targets = (initial_position + np.cumsum(inp_vel))[:, None]
+    pos_targets = initial_position + np.cumsum(inp_vel, axis=0)
 
     # Generate sequence of map ids. Choose first map randomly.
     map_ids = np.zeros(num_remaps + 1, dtype='int32')
