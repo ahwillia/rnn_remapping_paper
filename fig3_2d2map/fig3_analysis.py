@@ -17,13 +17,13 @@ def align_in_out(data_folder, model_IDs):
     remap_dim_angles = {
         "ctxt_in": np.zeros((n_models, 2)),
         "ctxt_out": np.zeros((n_models, 2)),
-        "pos_in": np.zeros(n_models, 2), 
+        "pos_in": np.zeros((n_models, 2)), 
         "pos_out": np.zeros((n_models, 4))
     }
     pos_dim_angles = {
         "ctxt_in": np.zeros((n_models, 2)),
         "ctxt_out": np.zeros((n_models, 2)),
-        "pos_in": np.zeros(n_models, 2), 
+        "pos_in": np.zeros((n_models, 2)), 
         "pos_out": np.zeros((n_models, 4))
     }
 
@@ -31,13 +31,14 @@ def align_in_out(data_folder, model_IDs):
         # get the rnn data
         model, _, _ = load_model_params(data_folder, m_id)
         inputs, outputs, targets = sample_rnn_data(data_folder, m_id)
-        X, map_targ, pos_targ = format_rnn_data(outputs["hidden_states"], \
+        X, map_targets, pos_targets = format_rnn_data(outputs["hidden_states"], \
                                                 targets["map_targets"], \
                                                 targets["pos_targets"])
-        
+        n_units = X.shape[-1]
+
         # split by context
-        X0 = X[map_targ==0]
-        X1 = X[map_targ==1]
+        X0 = X[map_targets==0]
+        X1 = X[map_targets==1]
         pos0 = pos_targets[map_targets==0]
         pos1 = pos_targets[map_targets==1]
 

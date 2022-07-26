@@ -63,7 +63,8 @@ def format_rnn_data(hidden_states, map_targets, pos_targets):
 
     # true positions
     pos_targ = pos_targets.detach().numpy()
-    pos_targ = pos_targ.ravel()
+    n_spatial_dims = pos_targ.shape[-1]
     pos_targ = (pos_targ + np.pi) % (2 * np.pi) - np.pi
+    pos_targ = pos_targ.reshape(-1, n_spatial_dims)
 
     return X, map_targ, pos_targ

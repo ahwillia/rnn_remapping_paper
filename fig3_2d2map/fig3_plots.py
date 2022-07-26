@@ -8,7 +8,7 @@ from mpl_toolkits.mplot3d import Axes3D
 
 from plot_utils import simple_cmap, ring_colormap
 from model_utils import sample_rnn_data, format_rnn_data
-from basic_analysis import tuning_curve_1d, compute_misalignment
+from basic_analysis import tuning_curve_2d, compute_misalignment
 import fig3_analysis as rnn
 
 from scipy.special import softmax
@@ -150,7 +150,7 @@ def plot_a2(pos_targets, pos_outputs, map_logits):
     return f, gs
 
 
-def plot_b(X, , map_targ, pos_targ, n_ex_units=3):
+def plot_b(X, map_targ, pos_targ, n_ex_units=3):
     '''
     Tuning curves split by context for example RNN units.
 
@@ -176,8 +176,10 @@ def plot_b(X, , map_targ, pos_targ, n_ex_units=3):
     pos1 = pos_targ[map_targ==1]
 
     # get the position binned firing rates for each map
-    fr_0 = tuning_curve_2d(X0, pos0[:, 0], pos0[:, 1])
-    fr_1 = tuning_curve_2d(X1, pos1[:, 0], pos1[:, 1])
+    fr_0 = tuning_curve_2d(X0, pos0[:, 0], pos0[:, 1], \
+                            smooth=True)
+    fr_1 = tuning_curve_2d(X1, pos1[:, 0], pos1[:, 1], \
+                            smooth=True)
 
     # normalize within each unit
     all_fr = np.stack((fr_0, fr_1)).copy()
@@ -186,14 +188,15 @@ def plot_b(X, , map_targ, pos_targ, n_ex_units=3):
 
     # select example units
     possible_units = np.arange(n_units)
-    possible_units = possible_units[np.max(np.mean(all_fr, axis=0), axis=0) > 0.3]
+    possible_units = possible_units[np.max(np.mean(all_fr, axis=0), \
+                                            axis=(0, 1)) > 0.3]
     ex_units = np.random.choice(possible_units, n_ex_units, replace=False)
 
     # fig params
     n_col = int(n_ex_units)
     gs = gridspec.GridSpec(2, n_col,\
-                           hspace=0.3, wspace=0.2)
-    f = plt.figure(figsize=(1.5, 1))
+                           hspace=0.3, wspace=0.3)
+    f = plt.figure(figsize=(1.6, 1))
 
     # plot the firing rate vs. position for each map
     for i, u in enumerate(ex_units):
@@ -213,9 +216,9 @@ def plot_b(X, , map_targ, pos_targ, n_ex_units=3):
 
             # labels
             if j == 0:
-                ax.set_title(f'unit {u}', fontsize=axis_label, pad=2)
+                ax.set_title(f'{u}', fontsize=axis_label, pad=2)
             if (i == 0) & (j == 1):
-                ax.set_ylabel('y position (rad.)', verticalalignment='bottom', y=80,\
+                ax.set_ylabel('y position (rad.)', verticalalignment='bottom', y=1.1,\
                                 fontsize=axis_label, labelpad=0.5)
             if (j == 1) & (i == 1):
                 ax.set_xlabel('x position (rad.)', fontsize=axis_label, labelpad=0.5)
@@ -232,6 +235,7 @@ def plot_b(X, , map_targ, pos_targ, n_ex_units=3):
 
 
 def plot_c(X, pos_targets, map_targets,
+    color_x=True,
     num_points=1000,
     axlim=2,
     reflect_x=False,
@@ -260,8 +264,8 @@ def plot_c(X, pos_targets, map_targets,
     # get the 2D tuning curves
     tc_X0, x_centers, y_centers = tuning_curve_2d(X0, pos0[:, 0], pos0[:, 1], return_pos=True)
     tc_X1 = tuning_curve_2d(X1, pos1[:, 0], pos1[:, 1])
-    tc_X0_flat = tc_X0.reshape(-1, hidden_size)
-    tc_X1_flat = tc_X1.reshape(-1, hidden_size)
+    tc_X0_flat = tc_X0.reshape(-1, num_neurons)
+    tc_X1_flat = tc_X1.reshape(-1, num_neurons)
     pos_flat_x = x_centers.reshape(-1)
     pos_flat_y = y_centers.reshape(-1)
 
@@ -271,7 +275,7 @@ def plot_c(X, pos_targets, map_targets,
     idx_2 = np.random.choice(num_posbins, size=num_points, replace=False)
 
     # Find PCs
-    pca = PCA(n_components=3)
+    pca = PCA(n_components=3).fit(X)
     x_1, y_1, z_1 = pca.transform(tc_X0_flat).T
     x_2, y_2, z_2 = pca.transform(tc_X1_flat).T
 
@@ -445,7 +449,7 @@ def plot_d(data_folder, model_IDs, \
     return f, ax0
 
 
-def plot_e(data_folder, model_IDs)
+def plot_e(data_folder, model_IDs):
     '''
     Misalignment scores for manifolds from all trained models
     Scores are normalized:
@@ -458,9 +462,9 @@ def plot_e(data_folder, model_IDs)
     for i, m_id in enumerate(model_IDs):
         # get the rnn data
         inputs, outputs, targets = sample_rnn_data(data_folder, m_id)
-        X, map_targ, pos_targ = format_rnn_data(outputs["hidden_states"],\
-                                                targets["map_targets"],\
-                                                targets["pos_targets"])
+        X, map_targets, pos_targets = format_rnn_data(outputs["hidden_states"],\
+                                                    targets["map_targets"],\
+                                                    targets["pos_targets"])
         n_units = X.shape[-1]
         
         # split by context
