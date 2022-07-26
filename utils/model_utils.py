@@ -36,7 +36,7 @@ def sample_rnn_data(data_folder, model_ID, batch_size=100):
     inputs = {
         "inp_init": inp_init, 
         "inp_remaps": inp_remaps,
-        "inp_vel": inp_vel
+        "inp_vel": np.squeeze(inp_vel)
     }
 
     outputs = {
@@ -66,5 +66,6 @@ def format_rnn_data(hidden_states, map_targets, pos_targets):
     n_spatial_dims = pos_targ.shape[-1]
     pos_targ = (pos_targ + np.pi) % (2 * np.pi) - np.pi
     pos_targ = pos_targ.reshape(-1, n_spatial_dims)
+    pos_targ = np.squeeze(pos_targ)
 
     return X, map_targ, pos_targ

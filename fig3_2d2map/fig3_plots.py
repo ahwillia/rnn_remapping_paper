@@ -291,10 +291,10 @@ def plot_c(X, pos_targets, map_targets,
         z_2 *= -1
 
     # fig params
-    fig = plt.figure(figsize=(2.2, 1.54))
+    fig = plt.figure(figsize=(3, 2.1))
     ax = plt.axes([0, 0, .6, 1.2], projection='3d')
-    DOT_SIZE = 2
-    PC_LW = 2
+    DOT_SIZE = 3
+    PC_LW = 3
     if color_x:
         pos_colors = pos_flat_x
     else:
@@ -376,7 +376,7 @@ def plot_d(data_folder, model_IDs, \
     hidden_size = X.shape[-1]
 
     # figure params
-    f = plt.figure(figsize=(1, 0.5))
+    f = plt.figure(figsize=(1.2, 0.7))
     DOT_SIZE = 5
     DOT_LW = 0.2
     CUM_LW = 1
@@ -485,7 +485,7 @@ def plot_e(data_folder, model_IDs):
     print(f'sem misalignment = {stats.sem(alignment_scores):.2}')
 
     # fig params 
-    f, ax = plt.subplots(1, 1, figsize=(1, 0.5))
+    f, ax = plt.subplots(1, 1, figsize=(1.5, 0.8))
     BAR_LW = 1
     THRESH_LW = 2
 
@@ -518,8 +518,6 @@ def plot_f(X, pos_targets,
     reflect_z=False):
     
     '''
-    ** copied exactly from fig1_plots **
-
     Slices from the toroidal manifolds
 
     Params
@@ -550,9 +548,9 @@ def plot_f(X, pos_targets,
         z_ *= -1
 
     # fig params
-    fig = plt.figure(figsize=(3, 2.1))
+    fig = plt.figure(figsize=(2, 1.4))
     ax = plt.axes([0, 0, .6, 1.2], projection='3d')
-    DOT_SIZE = 10
+    DOT_SIZE = 5
     PC_LW = 3
 
     # plot activity
@@ -585,8 +583,6 @@ def plot_f(X, pos_targets,
     ax.plot(*pc2, color="k", alpha=.8, lw=PC_LW)
     ax.plot(*pc3, color="k", alpha=.8, lw=PC_LW)
 
-    ax.set_title('RNN activity manifolds',
-                  fontsize=title_size, pad=-10)
     ax.view_init(azim=130, elev=30)
     ax.axis("off")
 
@@ -617,7 +613,7 @@ def plot_g(data_folder, model_IDs):
                                     stats.tstd(pos_dim_angles[label].ravel()))
 
     # fig params
-    f, ax = plt.subplots(1, 2, figsize=(1, 0.5))
+    f, ax = plt.subplots(1, 2, figsize=(1.5, 0.8))
     bar_colors = ['xkcd:dark gray', c1, pos_col, est_col]
     ERR_LW = 1.5
     xcoords = [1, 2, 4, 5]
@@ -656,8 +652,8 @@ def plot_g(data_folder, model_IDs):
     ax[1].tick_params(labelbottom=False, labelleft=False,
                       which='major', labelsize=tick_label, pad=0.5)
     ax[0].set_ylabel('cosine sim.', fontsize=axis_label, labelpad=1)
-    ax[0].set_title('context\ntuning dim.', fontsize=axis_label, pad=3)
-    ax[1].set_title('position\ntuning dim.', fontsize=axis_label, pad=3)
+    ax[0].set_title('context\ndim.', fontsize=axis_label, pad=3)
+    ax[1].set_title('pos.\n dim.', fontsize=axis_label, pad=3)
 
     return f, ax
 

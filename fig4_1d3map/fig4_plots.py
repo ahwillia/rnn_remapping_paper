@@ -422,103 +422,6 @@ def plot_e(data_folder, model_IDs, \
     return f, ax0
 
 
-def plot_x(X, map_targ, pos_targ,
-    color_pos=True,
-    num_points=1000,
-    axlim=2,
-    reflect_x=False,
-    reflect_y=False,
-    reflect_z=False):
-    
-    '''
-    Overlaid ring manifolds.
-
-    Params
-    ------
-    '''
-
-    # data params
-    num_posbins, num_neurons = X.shape
-    n_maps = np.max(np.unique(map_targ)) + 1
-
-    # mean-center and normalize cluster centroids
-    ms = []
-    for j in range(n_maps):
-        x1, binned_pos = tuning_curve_1d(X[map_targ==j],\
-                                            pos_targ[map_targ==j])
-        m1 = x1 - np.mean(x1, axis=0, keepdims=True)
-        m1_norm = np.linalg.norm(m1)
-        m1 = m1 / m1_norm
-        ms.append(m1)
-
-        if j == 0:
-            all_m = m1
-        else:
-            all_m = np.stack((all_m, m1), axis=0)
-
-    # Find PCs
-    pca = PCA(n_components=3).fit(all_m)
-
-    # Reflect axes if desired
-    if reflect_x:
-        x_ *= -1
-    if reflect_y:
-        y_ *= -1
-    if reflect_z:
-        z_ *= -1
-
-    # fig params
-    fig = plt.figure(figsize=(2.2, 1.54))
-    ax = plt.axes([0, 0, .6, 1.2], projection='3d')
-    DOT_SIZE = 15
-    PC_LW = 2
-
-    for j in range(n_maps):
-        m1 = ms[j]
-        x_, y_, z_ = pca.transform(m1).T
-
-        # plot activity
-        if color_pos:
-            ax.scatter(
-                x_, y_, z_,
-                c=binned_pos, cmap=ring_colormap(),
-                alpha=0.8, lw=0, s=DOT_SIZE)
-        else:
-            ax.scatter(
-                x_, y_, z_,
-                c=map_colors[j],
-                alpha=0.8, lw=0, s=DOT_SIZE)
-
-        # plot shadow
-        ax.scatter(
-            x_, y_, 
-            np.full(x_.shape[0], -axlim),
-            color="k", alpha=.02, lw=0, s=DOT_SIZE)
-
-    # axis params
-    ax.set_xlim(-axlim, axlim)
-    ax.set_ylim(-axlim, axlim)
-    ax.set_zlim(-axlim, axlim)
-
-    # plot axes
-    axlim = axlim - 1
-    pc1 = np.asarray([[-axlim, axlim], [axlim, axlim], [-axlim, -axlim]])
-    pc2 = np.asarray([[axlim, axlim], [-axlim, axlim], [-axlim, -axlim]])
-    pc3 = np.asarray([[axlim, axlim], [axlim, axlim], [-axlim, axlim]])
-    for p in [pc1, pc2, pc3]:
-        p[0] = p[0] + 1
-        p[1] = p[1] + 2
-
-    ax.plot(*pc1, color="k", alpha=.8, lw=PC_LW)
-    ax.plot(*pc2, color="k", alpha=.8, lw=PC_LW)
-    ax.plot(*pc3, color="k", alpha=.8, lw=PC_LW)
-
-    ax.view_init(azim=130, elev=30)
-    ax.axis("off")
-
-    return fig, ax
-
-
 def plot_f(data_folder, model_IDs):
     '''
     Misalignment scores for manifolds from all trained models
@@ -536,7 +439,7 @@ def plot_f(data_folder, model_IDs):
     n_maps = np.max(np.unique(map_targ)) + 1
     hidden_size = X.shape[-1]
 
-    alignment_scores = np.asarray([])
+    alignment_scores = np.zeros((n_models, n_maps))
     for i, m_id in enumerate(model_IDs):
         # get the rnn data
         inputs, outputs, targets = sample_rnn_data(data_folder, m_id)
@@ -552,33 +455,74 @@ def plot_f(data_folder, model_IDs):
                                     pos_targ[map_targ==((j+1)%n_maps)])
             norm_align, _, _, _ = compute_misalignment(x1, x2)
             
-            alignment_scores = np.append(alignment_scores, norm_align)
+            alignment_scores[i, j] = norm_align
+
+    # define 1:2 as most aligned, 3:1 as least aligned
+    sort_alignment = np.sort(alignment_scores, axis=1)
 
     print(f'mean misalignment = {np.mean(alignment_scores):.2}')
-    print(f'sem misalignment = {stats.sem(alignment_scores):.2}')
+    print(f'sem misalignment = {stats.sem(alignment_scores.ravel()):.2}')
 
     # fig params 
-    f, ax = plt.subplots(1, 1, figsize=(1.4, 0.7))
-    BAR_LW = 1
+    f, ax = plt.subplots(1, 1, figsize=(1, 1))
+    DOT_LW = 0.5
+    DOT_SIZE = 5
     THRESH_LW = 2
+    JIT = np.random.randn(n_models) * 0.03 # jitter points
 
-    ax.hist(
-        alignment_scores,
-        np.linspace(0.0, 1.0, 30),
-        color="gray", lw=BAR_LW, edgecolor="k")
-    ax.set_xlabel("misalignment", fontsize=axis_label, labelpad=1)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.plot([1, 1], [0, 10], dashes=[1, 1], lw=THRESH_LW, color="k")
-    ax.text(1, 12, "shuff\nthresh", fontsize=tick_label,\
-            horizontalalignment='center')
-
-    ax.set_xlim([0, 1.2])
-    ax.set_xticks(np.arange(0, 1.4, 0.6))
-    ax.set_yticks([0, 10, 20])
+    # plot the alignment scores for each pair
+    V = ax.violinplot(sort_alignment, 
+                      showextrema=False)
+    for i, v in enumerate(V['bodies']):
+        v.set_facecolor(map_colors[i])
+    for j in range(n_maps):
+        ax.scatter(np.full(n_models, j+1)+JIT, 
+                   sort_alignment[:, j], 
+                   facecolors='w', edgecolors=map_colors[j], 
+                   s=DOT_SIZE, lw=DOT_LW, alpha=1)
+        
+    # plot the shuffle threshold
+    ax.plot([0.8, 2.9], [1, 1], dashes=[1, 1], lw=THRESH_LW, color="k")
+    ax.text(3.6, 1, "shuff\nthresh", fontsize=tick_label,\
+            horizontalalignment='center', verticalalignment='center')
+        
+    # ticks and lims
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['left'].set_bounds(0, 1)
+    ax.spines['bottom'].set_bounds(1, 3)
+    ax.set_xlim([0.6, 3.5])
+    ax.set_xticks([1, 2, 3])
+    ax.set_ylim([0, 1])
+    ax.set_yticks(np.arange(0, 1.4, 0.5))
     ax.tick_params(which='major', labelsize=tick_label, pad=0.5)
-    ax.spines["left"].set_bounds(0, 20)
-    ax.set_ylabel("count", fontsize=axis_label, labelpad=1)
+
+    # labels
+    ax.set_ylabel('misalignment', fontsize=axis_label, labelpad=1)
+    ax.set_xticklabels(['1:2', '2:3', '3:1'])
+
+    # combined histogram
+    # f, ax = plt.subplots(1, 1, figsize=(1.4, 0.7))
+    # BAR_LW = 1
+    # THRESH_LW = 2
+
+    # ax.hist(
+    #     alignment_scores.ravel(),
+    #     np.linspace(0.0, 1.0, 30),
+    #     color="gray", lw=BAR_LW, edgecolor="k")
+    # ax.set_xlabel("misalignment", fontsize=axis_label, labelpad=1)
+    # ax.spines["top"].set_visible(False)
+    # ax.spines["right"].set_visible(False)
+    # ax.plot([1, 1], [0, 10], dashes=[1, 1], lw=THRESH_LW, color="k")
+    # ax.text(1, 12, "shuff\nthresh", fontsize=tick_label,\
+    #         horizontalalignment='center')
+
+    # ax.set_xlim([0, 1.2])
+    # ax.set_xticks(np.arange(0, 1.4, 0.6))
+    # ax.set_yticks([0, 10, 20])
+    # ax.tick_params(which='major', labelsize=tick_label, pad=0.5)
+    # ax.spines["left"].set_bounds(0, 20)
+    # ax.set_ylabel("count", fontsize=axis_label, labelpad=1)
 
     return f, ax
 
@@ -606,7 +550,8 @@ def plot_g(data_folder, model_IDs):
                                     stats.tstd(pos_dim_angles[label].ravel()))
 
     # fig params
-    f, ax = plt.subplots(1, 2, figsize=(2, 1))
+    f, ax = plt.subplots(2, 1, figsize=(1, 2.2))
+    plt.subplots_adjust(hspace=0.5)
     bar_colors = ['xkcd:dark gray', c1, pos_col, est_col]
     ERR_LW = 1.5
     xcoords = [1, 2, 4, 5]
@@ -641,12 +586,13 @@ def plot_g(data_folder, model_IDs):
 
     # labels
     ax[0].tick_params(labelbottom=False, which='major',
-                      labelsize=tick_label, pad=0.5)
-    ax[1].tick_params(labelbottom=False, labelleft=False,
-                      which='major', labelsize=tick_label, pad=0.5)
-    ax[0].set_ylabel('cosine sim.', fontsize=axis_label, labelpad=1)
-    ax[0].set_title('context\ntuning dim.', fontsize=axis_label, pad=3)
-    ax[1].set_title('position\ntuning dim.', fontsize=axis_label, pad=3)
+                        labelsize=tick_label, pad=0.5)
+    ax[1].tick_params(labelbottom=False, which='major', 
+                        labelsize=tick_label, pad=0.5)
+    ax[1].set_ylabel('cosine similarity', horizontalalignment='left', x=0.3,
+                        fontsize=axis_label, labelpad=1)
+    ax[0].set_title('context dim.', fontsize=axis_label, pad=3)
+    ax[1].set_title('pos. dim.', fontsize=axis_label, pad=3)
 
     return f, ax
 
@@ -716,3 +662,92 @@ def plot_supp_1(data_folder, model_IDs):
     ax.tick_params(which='major', labelsize=tick_label, pad=0.5)
 
     return f, ax
+
+
+def plot_supp2(X, map_targ, pos_targ,
+    color_pos=True,
+    num_points=1000,
+    axlim=2,
+    reflect_x=False,
+    reflect_y=False,
+    reflect_z=False):
+    
+    '''
+    Overlaid ring manifolds.
+
+    Params
+    ------
+    '''
+
+    # data params
+    num_posbins, num_neurons = X.shape
+    n_maps = np.max(np.unique(map_targ)) + 1
+
+    # mean-center and normalize cluster centroids
+    ms = []
+    for j in range(n_maps):
+        x1, binned_pos = tuning_curve_1d(X[map_targ==j],\
+                                            pos_targ[map_targ==j])
+        m1 = x1 - np.mean(x1, axis=0, keepdims=True)
+        m1_norm = np.linalg.norm(m1)
+        # m1 = m1 / m1_norm
+        ms.append(m1)
+
+        if j == 0:
+            all_m = m1
+        else:
+            all_m = np.row_stack((all_m, m1))
+
+    # Find PCs
+    pca = PCA(n_components=3).fit(all_m)
+
+    # fig params
+    fig = plt.figure(figsize=(2.2, 1.54))
+    ax = plt.axes([0, 0, .6, 1.2], projection='3d')
+    DOT_SIZE = 15
+    PC_LW = 2
+
+    for j in range(n_maps):
+        m1 = ms[j]
+        x_, y_, z_ = pca.transform(m1).T
+
+        # plot activity
+        if color_pos:
+            ax.scatter(
+                x_, y_, z_,
+                c=binned_pos, cmap=ring_colormap(),
+                alpha=0.6, lw=0, s=DOT_SIZE)
+        else:
+            ax.scatter(
+                x_, y_, z_,
+                c=map_colors[j],
+                alpha=0.6, lw=0, s=DOT_SIZE)
+
+        # plot shadow
+        ax.scatter(
+            x_, y_, 
+            np.full(x_.shape[0], -axlim),
+            color="k", alpha=.02, lw=0, s=DOT_SIZE)
+
+    # axis params
+    ax.set_xlim(-axlim, axlim)
+    ax.set_ylim(-axlim, axlim)
+    ax.set_zlim(-axlim, axlim)
+
+    # plot axes
+    axlim = axlim - 1
+    pc1 = np.asarray([[-axlim, axlim], [axlim, axlim], [-axlim, -axlim]])
+    pc2 = np.asarray([[axlim, axlim], [-axlim, axlim], [-axlim, -axlim]])
+    pc3 = np.asarray([[axlim, axlim], [axlim, axlim], [-axlim, axlim]])
+    for p in [pc1, pc2, pc3]:
+        p[0] = p[0] + 1
+        p[1] = p[1] + 2
+
+    ax.plot(*pc1, color="k", alpha=.8, lw=PC_LW)
+    ax.plot(*pc2, color="k", alpha=.8, lw=PC_LW)
+    ax.plot(*pc3, color="k", alpha=.8, lw=PC_LW)
+
+    ax.view_init(azim=130, elev=30)
+    ax.axis("off")
+
+    return fig, ax
