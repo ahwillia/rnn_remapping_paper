@@ -38,6 +38,7 @@ torch.manual_seed(args.TORCHSEED)
 task_params = {
     "num_steps": 1,
     "num_maps": 3,
+    "num_spatial_dimensions": 1,
     "remap_rate": 0.02, # expect 2 remaps every 100 steps
     "velocity_drift_stddev": 0.1,
     "velocity_noise_stddev": 0.3,
@@ -60,6 +61,7 @@ rnn_params = {
     "nonlinearity": "relu",
     "hidden_size": 248,
     "num_maps": task_params["num_maps"]
+    "num_spatial_dimensions": task_params["num_spatial_dimensions"],
 }
 
 

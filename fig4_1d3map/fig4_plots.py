@@ -319,7 +319,7 @@ def plot_c(X, pos_targets,
     return fig, ax
 
 
-def plot_d(data_folder, model_IDs, \
+def plot_e(data_folder, model_IDs, \
                 top_num=4, top_num_1=2, \
                 most_var_thresh=0.90):
     '''
@@ -422,7 +422,104 @@ def plot_d(data_folder, model_IDs, \
     return f, ax0
 
 
-def plot_e(data_folder, model_IDs):
+def plot_x(X, map_targ, pos_targ,
+    color_pos=True,
+    num_points=1000,
+    axlim=2,
+    reflect_x=False,
+    reflect_y=False,
+    reflect_z=False):
+    
+    '''
+    Overlaid ring manifolds.
+
+    Params
+    ------
+    '''
+
+    # data params
+    num_posbins, num_neurons = X.shape
+    n_maps = np.max(np.unique(map_targ)) + 1
+
+    # mean-center and normalize cluster centroids
+    ms = []
+    for j in range(n_maps):
+        x1, binned_pos = tuning_curve_1d(X[map_targ==j],\
+                                            pos_targ[map_targ==j])
+        m1 = x1 - np.mean(x1, axis=0, keepdims=True)
+        m1_norm = np.linalg.norm(m1)
+        m1 = m1 / m1_norm
+        ms.append(m1)
+
+        if j == 0:
+            all_m = m1
+        else:
+            all_m = np.stack((all_m, m1), axis=0)
+
+    # Find PCs
+    pca = PCA(n_components=3).fit(all_m)
+
+    # Reflect axes if desired
+    if reflect_x:
+        x_ *= -1
+    if reflect_y:
+        y_ *= -1
+    if reflect_z:
+        z_ *= -1
+
+    # fig params
+    fig = plt.figure(figsize=(2.2, 1.54))
+    ax = plt.axes([0, 0, .6, 1.2], projection='3d')
+    DOT_SIZE = 15
+    PC_LW = 2
+
+    for j in range(n_maps):
+        m1 = ms[j]
+        x_, y_, z_ = pca.transform(m1).T
+
+        # plot activity
+        if color_pos:
+            ax.scatter(
+                x_, y_, z_,
+                c=binned_pos, cmap=ring_colormap(),
+                alpha=0.8, lw=0, s=DOT_SIZE)
+        else:
+            ax.scatter(
+                x_, y_, z_,
+                c=map_colors[j],
+                alpha=0.8, lw=0, s=DOT_SIZE)
+
+        # plot shadow
+        ax.scatter(
+            x_, y_, 
+            np.full(x_.shape[0], -axlim),
+            color="k", alpha=.02, lw=0, s=DOT_SIZE)
+
+    # axis params
+    ax.set_xlim(-axlim, axlim)
+    ax.set_ylim(-axlim, axlim)
+    ax.set_zlim(-axlim, axlim)
+
+    # plot axes
+    axlim = axlim - 1
+    pc1 = np.asarray([[-axlim, axlim], [axlim, axlim], [-axlim, -axlim]])
+    pc2 = np.asarray([[axlim, axlim], [-axlim, axlim], [-axlim, -axlim]])
+    pc3 = np.asarray([[axlim, axlim], [axlim, axlim], [-axlim, axlim]])
+    for p in [pc1, pc2, pc3]:
+        p[0] = p[0] + 1
+        p[1] = p[1] + 2
+
+    ax.plot(*pc1, color="k", alpha=.8, lw=PC_LW)
+    ax.plot(*pc2, color="k", alpha=.8, lw=PC_LW)
+    ax.plot(*pc3, color="k", alpha=.8, lw=PC_LW)
+
+    ax.view_init(azim=130, elev=30)
+    ax.axis("off")
+
+    return fig, ax
+
+
+def plot_f(data_folder, model_IDs):
     '''
     Misalignment scores for manifolds from all trained models
     Scores are normalized:
@@ -583,8 +680,6 @@ def plot_supp_1(data_folder, model_IDs):
 
     # figure params
     f, ax = plt.subplots(1, 1, figsize=(0.5, 1))
-    pos_col = 'xkcd:cobalt blue'
-    c1 = 'xkcd:scarlet'
     DOT_SIZE = 10
     DOT_LW = 1
 
