@@ -12,6 +12,7 @@ from sklearn.decomposition import PCA
 from sklearn.utils import check_random_state
 from scipy.ndimage import maximum_filter1d
 
+import numpy as np
 import torch
 from torch import nn
 from torch.functional import F
@@ -22,12 +23,49 @@ from torch.optim.lr_scheduler import StepLR
 from time import time
 from tqdm import trange
 
+def initial_pts(X, num_pts=1000):
+    '''
+    Choose initialization points randomly from throughout the activity space.
+
+    Params
+    ------
+    X : ndarray, shape (n_obs, n_units)
+        RNN unit activity at each observation
+
+    Returns
+    -------
+    init_states : ndarray, shape (num_pts, n_units)
+        points in activity space from which to initialize
+        the fixed point finder
+    '''
+    # find the top 3 PCs for the neural activity space
+    pca = PCA(n_components=3).fit(X)
+    pcs = pca.transform(X)
+
+    # define the corners
+    pc_max = np.max(pcs, axis=0)
+    pc_min = np.min(pcs, axis=0)
+    pc_corners = np.stack((pc_min, pc_max), axis=0)
+
+    # randomly sample initial states
+    init_pcs = torch.zeros([num_pts, 3])
+    for x in range(3):
+        x_min = np.min(pc_corners[:, x])
+        x_max = np.max(pc_corners[:, x])    
+        init_pcs[:, x] = (x_min - x_max) * torch.rand(num_pts) + x_max
+        
+    # transform back to full D
+    init_states = pca.inverse_transform(init_pcs)
+
+    return init_states
+
 '''
 perform SGD over the hidden states to minimize the velocity
 finds fixed and slow points in the system
 '''
 # file paths
 data_folder = f"../data/saved_models/1d_2map/"
+model_ID = '10_100'
 outdir = f"../data/saved_models/1d_2map/{model_ID}/"
 
 ### HYPERPARAMETERS ###
@@ -59,8 +97,9 @@ init_states = torch.from_numpy(init_states)
 prev_states = torch.nn.Parameter(init_states)
 
 # set the velocity and context inputs to zero
-inp_vel = torch.zeros(num_batch, task_params["num_spatial_dimensions"])
-inp_remaps = torch.zeros(num_batch, task_params["num_maps"])
+num_pts = init_states.shape[0]
+inp_vel = torch.zeros(num_pts, task_params["num_spatial_dimensions"])
+inp_remaps = torch.zeros(num_pts, task_params["num_maps"])
 
 ### SGD ###
 # for stochastic gradient descent
@@ -128,43 +167,6 @@ np.save(outdir + "pos_fixed_pt.npy", pos_outputs_np)
 #                          )
 
 # plt.show()
-
-
-def initial_pts(X, num_pts=1000):
-    '''
-    Choose initialization points randomly from throughout the activity space.
-
-    Params
-    ------
-    X : ndarray, shape (n_obs, n_units)
-        RNN unit activity at each observation
-
-    Returns
-    -------
-    init_states : ndarray, shape (num_pts, n_units)
-        points in activity space from which to initialize
-        the fixed point finder
-    '''
-    # find the top 3 PCs for the neural activity space
-    pca = PCA(n_components=3).fit(X)
-    pcs = pca.transform(X)
-
-    # define the corners
-    pc_max = np.max(pcs, axis=0)
-    pc_min = np.min(pcs, axis=0)
-    pc_corners = np.stack((pc_min, pc_max), axis=0)
-
-    # randomly sample initial states
-    init_pcs = torch.zeros([num_pts, 3])
-    for x in range(3):
-        x_min = np.min(pc_corners[:, x])
-        x_max = np.max(pc_corners[:, x])    
-        init_pcs[:, x] = (x_min - x_max) * torch.rand(num_pts) + x_max
-        
-    # transform back to full D
-    init_states = pca.inverse_transform(init_pcs)
-
-    return init_states
 
 
 def plot_fixed_pts(model, fixed_pts, random_state, num_points, **kwargs):

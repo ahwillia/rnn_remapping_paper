@@ -80,24 +80,24 @@ class RemapManualRNN(nn.Module):
         return pos_outputs, map_outputs, hidden_states
 
 
-def one_step(self, prev_state, inp_vel, inp_remaps, \
-                    return_pos=False):
-        """
-        Args:
-            prev_state : n_batch x hidden_size
-            inp_vel : n_batch x 1
-            inp_remaps : n_batch x num_maps
+    def one_step(self, prev_state, inp_vel, inp_remaps, \
+                        return_pos=False):
+            """
+            Args:
+                prev_state : n_batch x hidden_size
+                inp_vel : n_batch x 1
+                inp_remaps : n_batch x num_maps
 
-        Returns:
-            pos_outputs : n_steps x n_batch x 2
-            next_state : n_batch x hidden_size
-        """
+            Returns:
+                pos_outputs : n_steps x n_batch x 2
+                next_state : n_batch x hidden_size
+            """
 
-        inputs = torch.cat((inp_vel, inp_remaps), axis=-1)
-        next_state = self._f(self.linear_hh(prev_state) + self.linear_ih(inputs))
+            inputs = torch.cat((inp_vel, inp_remaps), axis=-1)
+            next_state = self._f(self.linear_hh(prev_state) + self.linear_ih(inputs))
 
-        if return_pos:
-            pos_outputs = self.readout_layer_pos(next_state)
-            return next_state, pos_outputs
-        else:
-            return next_state
+            if return_pos:
+                pos_outputs = self.readout_layer_pos(next_state)
+                return next_state, pos_outputs
+            else:
+                return next_state

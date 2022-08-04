@@ -29,12 +29,12 @@ def load_fixed_pts(data_folder, model_ID, **kwargs):
     model, task_params, _ = load_model_params(data_folder, model_ID)
 
     # load the fixed points
-    fixed_pts = np.load(f"{data_folder}/saved_models/{model_ID}/states_fixed_pt.npy")
+    fixed_pts = np.load(f"{data_folder}{model_ID}/states_fixed_pt.npy")
     fixed_pts_torch = torch.from_numpy(fixed_pts)
     num_pts = fixed_pts.shape[0]
 
     # load the predicted positions
-    pos_pred_fp = np.load(f"{data_folder}/saved_models/{model_ID}/states_fixed_pt.npy")
+    pos_pred_fp = np.load(f"{data_folder}{model_ID}/states_fixed_pt.npy")
     pos_pred_fp = np.arctan2(pos_pred_fp[:, 1], pos_pred_fp[:, 0])
 
     # filter out points where the velocity is too great
@@ -62,7 +62,8 @@ def filter_by_velocity(model, task_params, \
     '''
     # data params
     num_pts = fixed_pts_torch.shape[0]
-    num_pos_dims = task_params["num_spatial_dimensions"]
+    num_pos_dims = 1
+    # num_pos_dims = task_params["num_spatial_dimensions"]
     num_maps = task_params["num_maps"]
 
     # inputs
@@ -91,7 +92,7 @@ Sussillo and Barak (Neural Comput., 2013)
 Maheswaranathan et al. (Adv. Neural Inf. Process. Syst., 2019)
 '''
 def characterize_fps(model, task_params, \
-                    fixed_pts):
+                    fixed_pts, sort_eigs=True):
     """
     Linearizes RNN dynamics around each fixed point and takes 
     the eigendecomposition to approximate the local dynamics.
@@ -100,23 +101,33 @@ def characterize_fps(model, task_params, \
     ------
     fixed_pts : torch array, shape (num_points, hidden_size)
         locations in activity space for each fixed point
+    sort_eigs : bool, default is True
+        if True, sorts the output from largest to smallest eigenvalue
     
     Returns
     -------
-
+    Js : ndarray, shape (num_fixed_pts, num_units, num_units)
+        Jacobian for each fixed point
+    max_eigs : ndarray, shape (num_fixed_pts, )
+        real component for the largest eigenvalue for each fixed point
+    eig_vals : ndarray, len (num_fixed_pts, num_units)
+        the eigenvalues for each fixed point
+    eig_vecs : ndarray, len (num_fixed_pts, num_units, num_units)
+        the eigenvectors for each fixed point
     """
     # data params
     num_maps = task_params["num_maps"]
-    num_pos_dims = task_params["num_spatial_dimensions"]
+    num_pos_dims = 1
+    # num_pos_dims = task_params["num_spatial_dimensions"]
     num_fixed_pts = fixed_pts.shape[0]
 
     # get the Jacobian for each fixed point
-    inp_vel = torch.zeros(num_fixed_pts, num_pos_dims)
-    inp_remaps = torch.zeros(num_fixed_pts, num_maps) 
+    inp_vel = torch.zeros(num_pos_dims)
+    inp_remaps = torch.zeros(num_maps) 
     Js = []
     for i in trange(num_fixed_pts):
         fp = fixed_pts[i]
-        J = extract_jacobian(model, fp, \
+        J = compute_jacobian(model, fp, \
                              inp_vel=inp_vel, \
                              inp_remaps=inp_remaps)
         Js.append(J.detach().numpy())
@@ -131,8 +142,21 @@ def characterize_fps(model, task_params, \
         eig_vals.append(lam)
         eig_vecs.append(V)
         max_eigs = np.append(max_eigs, np.max(lam.real))
+    eig_vals = np.asarray(eig_vals)
+    eig_vecs = np.asarray(eig_vecs)
 
-    return Js, max_eigs, eig_vals, eig_vecs
+    # sort by the max eigenvalue
+    if sort_eigs:
+        sort_idx = np.argsort(max_eigs).astype(int)
+        sort_idx = sort_idx[::-1].astype(int)
+
+        fixed_pts = fixed_pts[sort_idx]
+        Js = Js[sort_idx]
+        eig_vals = eig_vals[sort_idx]
+        eig_vecs = eig_vecs[sort_idx]
+        max_eigs = max_eigs[sort_idx]
+
+    return Js, max_eigs, eig_vals, eig_vecs, sort_idx
 
 def compute_jacobian(model, x, **kwargs):
     """
@@ -194,11 +218,12 @@ def dist_to_map(X1, X2, y):
         distance along the remapping dim to each map
         -1 = in map 1; 1 = in map 2; 0 = between the maps
     '''
+    # mean center the activity in each map
     X1_bar = np.mean(X1, axis=0)
     X2_bar = np.mean(X2, axis=0)
 
-    # define the remapping dimension (hidden_size,)
-    remap_dim = remapping_dim(X1, X2) / np.linalg.norm(X1_bar - X2_bar)
+    # define the normalized remapping dimension (hidden_size,)
+    remap_dim = X1_bar - X2_bar / np.linalg.norm(X1_bar - X2_bar)
 
     # project onto the remapping dim
     proj_m1 = X1_bar @ remap_dim # map 1
