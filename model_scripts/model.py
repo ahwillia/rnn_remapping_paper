@@ -53,7 +53,7 @@ class RemapManualRNN(nn.Module):
           map_logits : n_steps x n_batch x num_maps
         """
 
-        # assert inp_vel.shape[-1] == self.num_spatial_dimensions
+        assert inp_vel.shape[-1] == self.num_spatial_dimensions
         assert inp_remaps.shape[-1] == self.num_maps
 
         # Initial states, (n_batch, hidden_size).
@@ -63,8 +63,7 @@ class RemapManualRNN(nn.Module):
         inputs = torch.cat((inp_vel, inp_remaps), axis=-1)
 
         # RNN outputs.
-        pos_outputs = torch.empty((inputs.shape[0], inputs.shape[1], 2))
-        # pos_outputs = torch.empty((inputs.shape[0], inputs.shape[1], 2 * self.num_spatial_dimensions))
+        pos_outputs = torch.empty((inputs.shape[0], inputs.shape[1], 2 * self.num_spatial_dimensions))
         map_outputs = torch.empty((inputs.shape[0], inputs.shape[1], self.num_maps))
 
         # RNN hidden states, (n_steps, n_batch, hidden_size).
