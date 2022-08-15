@@ -4,7 +4,6 @@ import json
 sys.path.insert(1, '../model_scripts/')
 sys.path.insert(1, '../utils/')
 from model import RemapManualRNN
-from debug_plots import plot_trial, plot_init_pos_perf
 from task import RemapTaskLoss, generate_batch
 from torch.optim import SGD, Adam
 from torch.nn.utils.clip_grad import clip_grad_norm_
@@ -60,7 +59,7 @@ train_params = {
 rnn_params = {
     "nonlinearity": "relu",
     "hidden_size": 248,
-    "num_maps": task_params["num_maps"]
+    "num_maps": task_params["num_maps"],
     "num_spatial_dimensions": task_params["num_spatial_dimensions"],
 }
 
@@ -150,6 +149,7 @@ with open(outdir + "rnn_params.json", "w") as f:
 
 
 # PLOTS -- used only for debugging.
+# from debug_plots import plot_trial, plot_init_pos_perf
 # fig, axes = plt.subplots(2, 1, sharex=True)
 # axes[0].plot(pos_losses, label="position decoding")
 # axes[0].plot(map_losses, label="context decoding")

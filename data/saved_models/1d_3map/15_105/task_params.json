@@ -1,5 +1,6 @@
 {
     "num_maps": 3,
+    "num_spatial_dimensions": 1,
     "num_steps": 301,
     "remap_pulse_duration": 2,
     "remap_rate": 0.02,

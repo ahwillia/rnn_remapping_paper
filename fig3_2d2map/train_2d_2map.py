@@ -1,6 +1,5 @@
 import sys
 sys.path.insert(1, '../model_scripts/')
-sys.path.insert(1, '../utils/')
 import os
 import json
 from model import RemapManualRNN

@@ -1,5 +1,6 @@
 {
     "hidden_size": 248,
     "nonlinearity": "relu",
-    "num_maps": 2
+    "num_maps": 2,
+    "num_spatial_dimensions": 1
 }
