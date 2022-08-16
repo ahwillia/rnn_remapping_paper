@@ -7,6 +7,7 @@ from dim_alignment import position_subspace, remapping_dim, cosine_sim, proj_aB
 from model_utils import load_model_params, sample_rnn_data, format_rnn_data
 
 from sklearn.utils import check_random_state
+import scipy
 from scipy.ndimage import maximum_filter1d
 from scipy.ndimage import gaussian_filter1d
 
@@ -359,9 +360,12 @@ def fr_by_traversal(X, pos_targ, traversals_by_obs,\
 
     return FR
 
-
-''' position and remapping dims alignment to the inputs and outputs '''
+''' Geometry '''
 def align_in_out(data_folder, model_IDs):
+    '''
+    position and remapping dims alignment to the
+    inputs and output weights
+    '''
     n_models = len(model_IDs)
 
     # to store the projections
@@ -420,3 +424,80 @@ def align_in_out(data_folder, model_IDs):
             pos_dim_angles[label][i] = np.abs(proj_aB(w, pos_subspace))
 
     return remap_dim_angles, pos_dim_angles
+
+def shuff_xi_rotate(tc_0, tc_1, W):
+    ''' shuffle function for compute remap vectors '''
+    n_pos_bins, n_units = tc_1.shape
+    
+    # randomly rotate tc_1 in the nullspace of W
+    P = scipy.linalg.null_space(W.T)
+    Q = np.linalg.qr(np.random.randn(P.shape[1], P.shape[1]))[0]
+    tc_1_rotate = tc_1 @ (P @ Q @ P.T)
+    
+    # find random vectors
+    return tc_0 - tc_1_rotate
+
+
+def shuff_xi_nullspace(xi_p, W):
+    ''' alt shuffle function for compute remap vectors '''
+    n_pos_bins, n_units = xi_p.shape
+    
+    # find random vectors
+    z = np.random.randn(n_units, n_pos_bins)
+
+    # get the portion in the nullspace
+    proj = W @ np.linalg.inv(W.T @ W) @ W.T
+    z_null = z - proj @ z
+
+    # normalize to each pos bin
+    z_null = (z_null / np.linalg.norm(z_null)) * np.linalg.norm(xi_p, axis=1)
+    
+    return z_null.T
+
+
+def compute_remap_vectors(data_folder, m_id, \
+                          n_pos_bins=50, n_shuffle=100):
+    # get the rnn data
+    model, _, _ = load_model_params(data_folder, m_id)
+    inputs, outputs, targets = sample_rnn_data(data_folder, m_id)
+    X, map_targ, pos_targ = format_rnn_data(outputs["hidden_states"],\
+                                            targets["map_targets"],\
+                                            targets["pos_targets"])
+    
+    # split by context
+    X0 = X[map_targ==0]
+    X1 = X[map_targ==1]
+    pos0 = pos_targ[map_targ==0]
+    pos1 = pos_targ[map_targ==1]
+
+    # get the position-binned firing rates
+    tc_0, _ = tuning_curve_1d(X0, pos0, n_pos_bins=n_pos_bins)
+    tc_1, _ = tuning_curve_1d(X1, pos1, n_pos_bins=n_pos_bins)
+
+    # find the remapping dimension
+    v = remapping_dim(tc_0, tc_1)
+
+    # find each psi_p
+    xi_p = tc_0 - tc_1
+    
+    # is xi_p orthog. to the position output weights?
+    pos_out_w = model.readout_layer_pos.weight
+    W = pos_out_w.detach().numpy().T
+    Wxi = (xi_p @ W) / np.linalg.norm(xi_p)
+    avg_Wxi = np.mean(Wxi, axis=1)
+
+    # get the difference
+    d_xi = np.linalg.norm(v - xi_p, axis=1) / np.linalg.norm(v)
+    
+    # compute the shuffles
+    d_shuff = np.zeros([n_shuffle, n_pos_bins])
+    for k in range(n_shuffle):
+        # shuffle 1: randomly chosen from the nullspace
+        # z_null = shuff_xi_nullspace(xi_p, W)
+        # d_shuff[k] = np.linalg.norm(v - z_null, axis=1) / np.linalg.norm(v)
+        
+        # shuffle 2: randomly rotate tc_1
+        z_rotate = shuff_xi_rotate(tc_0, tc_1, W)
+        d_shuff[k] = np.linalg.norm(v - z_rotate, axis=1) / np.linalg.norm(v)
+        
+    return avg_Wxi, d_xi, d_shuff

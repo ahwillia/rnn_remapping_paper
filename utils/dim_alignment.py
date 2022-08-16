@@ -20,17 +20,14 @@ def proj_aB(v, P):
     return cosine_sim(v_bar, v)
     
 
-def remapping_dim(X0, X1, normalize=False):
+def remapping_dim(X0, X1):
     '''
     get the remapping dimension from two sets of 
     firing rates; shape (n_obs, hidden_size)
     '''
     X0_bar = np.mean(X0, axis=0)
     X1_bar = np.mean(X1, axis=0)
-    if normalize:
-        return (X0_bar - X1_bar) / np.linalg.norm(X0_bar - X1_bar)
-    else:
-        return X0_bar - X1_bar
+    return X0_bar - X1_bar
 
 def position_subspace(X_tc, num_pcs=2):
     '''

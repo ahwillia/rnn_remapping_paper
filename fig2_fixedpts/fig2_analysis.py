@@ -4,6 +4,7 @@ import sys
 sys.path.append("../utils/")
 
 from scipy import stats
+from scipy.linalg import subspace_angles
 from tqdm import trange
 
 from basic_analysis import tuning_curve_1d
@@ -85,6 +86,72 @@ def filter_by_velocity(model, task_params, \
     vel_idx = vels < vel_thresh
 
     return vel_idx
+
+
+def eig_vec_examples(stable_idx, saddle_idx, \
+                        im_idx, fp_dist, \
+                        n_ex = 16, map_thresh=0.1):
+    '''
+    Get the indices for example fixed points for panels F & G.
+
+    Chooses n_ex example points from each manifold and the
+    separatrix for a total of roughly 3 * n_ex example points
+    (minus positions for which there is no nearby fixed point
+    that meets criteria).
+
+    Aims for points that are evenly spaced around each ring.
+    '''
+    # choose points that are evenly spaced around each ring
+    ex_pos = np.linspace(-np.pi, np.pi, n_ex)
+
+    # choose real saddle or stable points
+    stable_saddle_idx = (stable_idx | saddle_idx)
+    stable_saddle_idx[im_idx] = False
+
+    # index by map
+    map_1_idx = np.round(fp_dist, 1) < -map_thresh
+    map_2_idx = np.round(fp_dist, 1) > map_thresh
+    middle_idx = (np.round(fp_dist, 1) > -1 + map_thresh) \
+                    & (np.round(fp_dist, 1) < 1 - map_thresh)
+
+    # set the example point for each position bin
+    m1_idx = np.zeros(n_ex)
+    m2_idx = np.zeros(n_ex)
+    mid_idx = np.zeros(n_ex)
+    for i, p in enumerate(ex_pos):
+        p_idx = np.abs(pos_pred_fp - p) <= 0.2
+        
+        # map 1
+        m1_options = np.where(p_idx & 
+                              map_1_idx & 
+                              stable_saddle_idx)[0]
+        if m1_options.shape[0] == 0:
+            m1_idx[i] = np.nan # no fps near this pos
+        else:
+            m1_idx[i] = np.random.choice(m1_options)
+        
+        # map 2
+        m2_options = np.where(p_idx & 
+                              map_2_idx & 
+                              stable_saddle_idx)[0]
+        if m2_options.shape[0] == 0:
+            m2_idx[i] = np.nan # no fps near this pos
+        else:
+            m2_idx[i] = np.random.choice(m2_options)
+        
+        # saddle
+        mid_options = np.where(p_idx & 
+                               middle_idx & 
+                               stable_saddle_idx)[0]
+        if mid_options.shape[0] == 0:
+            mid_idx[i] = np.nan # no fps near this pos
+        else:
+            mid_idx[i] = np.random.choice(mid_options)
+        
+    ex_idx = np.concatenate((m1_idx, mid_idx, m2_idx))
+    ex_idx = ex_idx[~np.isnan(ex_idx)].astype(int)
+
+    return ex_idx, m1_idx, mid_idx, m2_idx
 
 
 ''' Nonlinear systems analysis 
@@ -233,3 +300,117 @@ def dist_to_map(X1, X2, y):
     # get distance to map
     y_dist = (proj_y - proj_m1) / (proj_m2 - proj_m1)
     return 2 * (y_dist - .5) # classify -1 or 1
+
+def align_eigvecs(eig_vals, eig_vecs, fp_dist, \
+                    X, map_targ, pos_targ):
+    '''
+    Find the alignment of the top eigenvectors to the
+    context tuning dimension and position subspaces.
+
+    Each eigenvector is projected onto the position
+    subspace associated with the closest map, or for
+    saddle points onto the joint position subspace.
+
+    For complex top eigenvectors, first define a plane
+    spanned by the real and imaginary components and
+    then align that plane to each dimension.
+
+    Params
+    ------
+    eig_vals : ndarray, len (num_fixed_pts, num_units)
+        the eigenvalues for each fixed point
+    eig_vecs : ndarray, len (num_fixed_pts, num_units, num_units)
+        the eigenvectors for each fixed point
+    fp_dist : ndarray, shape (num_fixed_pts,)
+        distance along the remapping dim to each map
+        -1 = in map 1; 1 = in map 2; 0 = between the maps
+    X : ndarray, shape (n_obs, hidden_size)
+        RNN unit activity at each observation
+    pos_targ : ndarray, shape (n_obs,)
+        track positions at each observation (rad)
+    map_targ : ndarray of ints, shape (n_obs,)
+        context at each observation
+
+    Returns
+    -------
+    remap_angles : ndarray, shape (num_fixed_pts, )
+        angle between each top eigenvector and the
+        context tuning dimension
+    pos_angles : ndarray, shape (num_fixed_pts, )
+        angle between each top eigenvector and the
+        nearest position subspace
+    '''
+    num_fixed_pts = eig_vals.shape[0]
+
+    # find imaginary top eigenvals & store the top eigenvecs
+    im_idx = np.asarray([])
+    for i in range(num_fixed_pts):
+        lam = eig_vals[i]
+        V = eig_vecs[i]
+        max_idx = np.argmax(lam.real)
+        if i == 0:
+            Vs = V[:, max_idx]
+        else:
+            Vs = np.column_stack((Vs, V[:, max_idx]))
+        if np.abs(lam[max_idx].imag) > 1e-5:
+            im_idx = np.append(im_idx, i)
+    im_idx = im_idx.astype(int)
+
+    # split the activity and positions by context
+    X0 = X[map_targ==0]
+    X1 = X[map_targ==1]
+    pos0 = pos_targ[map_targ==0]
+    pos1 = pos_targ[map_targ==1]
+
+    # define the context tuning dimension
+    remap_dim = remapping_dim(X0, X1)
+
+    # define the position subspaces
+    X0_tc, _ = tuning_curve_1d(X0, pos0, \
+                                n_pos_bins=250)
+    X1_tc, _ = tuning_curve_1d(X1, pos1, \
+                                n_pos_bins=250)
+    m1_subspace = position_subspace(X0_tc)
+    m2_subspace = position_subspace(X1_tc)
+    pos_subspace = position_subspace(np.stack((X0_tc, X1_tc)))
+
+    # index by nearest map
+    map_1_idx = np.round(fp_dist, 1) < -0.5
+    map_2_idx = np.round(fp_dist, 1) > 0.5
+
+    # relate each eigenvector to each subspace
+    remap_angles = np.asarray([])
+    pos_angles = np.asarray([])
+    for i in trange(num_fixed_pts):
+        v = Vs[:, i]
+        
+        # compare to the appropriate pos subspace
+        if map_1_idx[i]:
+            p_subspace = m1_subspace
+        elif map_2_idx[i]:
+            p_subspace = m2_subspace
+        else:
+            p_subspace = pos_subspace
+        
+        # if complex, define the plane spanned by its eigenvectors
+        if i in im_idx:
+            u = v.real - np.mean(v.real)
+            w = v.imag - np.mean(v.imag)
+            u_norm = u /  np.linalg.norm(u)
+            w_norm = w / np.linalg.norm(w)
+            v_sub = np.stack((u_norm, w_norm), axis=-1)
+            
+            r_angle = dim_alignment.proj_aB(remap_dim, v_sub)
+            p_angle = subspace_angles(p_subspace, v_sub)
+            p_angle = np.cos(np.max(p_angle))
+            
+        else:
+            u = v - np.mean(v)
+            u_norm = u / np.linalg.norm(u)
+            r_angle = dim_alignment.cosine_sim(remap_dim, u_norm)
+            p_angle = dim_alignment.proj_aB(u_norm, p_subspace)
+        
+        remap_angles = np.append(remap_angles, r_angle)
+        pos_angles = np.append(pos_angles, p_angle)
+
+    return remap_angles, pos_angles

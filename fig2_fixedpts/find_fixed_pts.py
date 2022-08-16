@@ -65,7 +65,7 @@ finds fixed and slow points in the system
 '''
 # file paths
 data_folder = f"../data/saved_models/1d_2map/"
-model_ID = '10_100'
+# model_ID = '10_100'
 outdir = f"../data/saved_models/1d_2map/{model_ID}/"
 
 ### HYPERPARAMETERS ###

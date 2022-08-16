@@ -317,3 +317,73 @@ def plot_d(Js, ex_idx):
         ax.tick_params(which='major', labelsize=tick_label, pad=1)
 
     return f, gs
+
+
+def plot_e(stable_idx, saddle_idx, **kwargs):
+    '''
+    Plot the alignment of the eigenvectors to either the
+    remapping dimension or position subspace.
+
+    Params
+    ------
+    stable_idx : ndarray, shape (n_fixed_pts,)
+        index for quasi-stable points
+    saddle_idx : ndarray, shape (n_fixed_pts,)
+        index for saddle points
+    **kwargs for align_eigvecs
+    '''
+    # data params
+    remap_angles, pos_angles = rnn.align_eigvecs(**kwargs)
+
+    # fig params
+    f = plt.figure(figsize=(1, 1.8))
+    gs = gridspec.GridSpec(2, 1, hspace=1.5)
+    bins = np.linspace(-0.2, 1.0, 30)
+
+    # remap dimension
+    ax0 = plt.subplot(gs[0])
+    ax0.hist(remap_angles[stable_idx], bins=bins, 
+            facecolor=stable_col, edgecolor='k',
+            density=False, lw=1, alpha=1, label='stable'
+           )
+    ax0.hist(remap_angles[saddle_idx], bins=bins, 
+            facecolor=unstable_col, edgecolor='k',
+            density=False, lw=1, alpha=1, label='saddle'
+           )
+
+    ax0.spines['right'].set_visible(False)
+    ax0.spines['top'].set_visible(False)
+    ax0.set_yticks([0, 50, 100])
+    ax0.set_xticks([0, 0.5, 1])
+    xlims = ax0.get_xlim()
+    ax0.spines['left'].set_bounds(0, 100)
+    ax0.spines['bottom'].set_bounds(xlims[0], 1)
+
+    ax0.set_title('remap dimension', fontsize=10, pad=4)
+    ax0.set_xlabel('cosine similarity', fontsize=9, labelpad=0.5)
+    ax0.tick_params(which='major', labelsize=7, pad=0.5)
+
+    # position subspace
+    ax1 = plt.subplot(gs[1])
+    ax1.hist(pos_angles[stable_idx], bins=bins, 
+            facecolor=stable_col, edgecolor='k',
+            density=False, lw=1, alpha=1, label='stable'
+           )
+    ax1.hist(pos_angles[saddle_idx], bins=bins, 
+            facecolor=unstable_col, edgecolor='k',
+            density=False, lw=1, alpha=1, label='saddle'
+           )
+
+    ax1.spines['right'].set_visible(False)
+    ax1.spines['top'].set_visible(False)
+    ax1.set_yticks([0, 75, 150])
+    ax1.set_xticks([0, 0.5, 1])
+    xlims = ax1.get_xlim()
+    ax1.spines['left'].set_bounds(0, 150)
+    ax1.spines['bottom'].set_bounds(xlims[0], 1)
+
+    ax1.set_title('position subspace', fontsize=title_size, pad=4)
+    ax1.set_xlabel('cosine similarity', fontsize=axis_label, labelpad=0.5)
+    ax1.tick_params(which='major', labelsize=tick_label, pad=0.5)
+
+    return f, gs
