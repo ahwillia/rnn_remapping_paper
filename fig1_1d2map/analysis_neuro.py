@@ -97,7 +97,11 @@ def get_maps(Y, N=2, M=2):
     kmeans.fit(Y_flat)
     H = kmeans.cluster_centers_
     W_raw = kmeans.labels_
-    W = np.column_stack((W_raw, np.abs(W_raw - 1))) 
+    
+    # reformat W to be (n_trials, n_maps)
+    W = np.zeros([n_trials, N])
+    for m in range(N):
+        W[:, m] = (W_raw == m) 
 
     # keep trial index for the M most common maps
     if M < N:
