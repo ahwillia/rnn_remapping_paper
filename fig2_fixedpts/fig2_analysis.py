@@ -98,8 +98,6 @@ def eig_vec_examples(stable_idx, saddle_idx, \
     separatrix for a total of roughly 3 * n_ex example points
     (minus positions for which there is no nearby fixed point
     that meets criteria).
-
-    Aims for points that are evenly spaced around each ring.
     '''
     # choose points that are evenly spaced around each ring
     ex_pos = np.linspace(-np.pi, np.pi, n_ex)
@@ -153,6 +151,37 @@ def eig_vec_examples(stable_idx, saddle_idx, \
 
     return ex_idx, m1_idx, mid_idx, m2_idx
 
+
+def get_top_eigvecs(eig_vals, eig_vecs):
+    '''
+    Pulls out the eigenvector associated with the largest
+    eigenvalue for each fixed point.
+    '''
+    num_fixed_pts = eig_vals.shape[0]
+    for i in range(num_fixed_pts):
+        lam = eig_vals[i]
+        V = eig_vecs[i]
+        max_idx = np.argmax(lam.real)
+        if i == 0:
+            Vs = V[:, max_idx]
+        else:
+            Vs = np.column_stack((Vs, V[:, max_idx]))
+    return Vs
+
+
+def get_im_idx(eig_vals, eig_vecs):
+    '''
+    Indices for fixed points whose largest eigenvalue
+    is imaginary.
+    '''
+    im_idx = np.asarray([])
+    for i in range(num_fixed_pts):
+        lam = eig_vals[i]
+        V = eig_vecs[i]
+        max_idx = np.argmax(lam.real)
+        if np.abs(lam[max_idx].imag) > 1e-5:
+            im_idx = np.append(im_idx, i)
+    return im_idx.astype(int)
 
 ''' Nonlinear systems analysis 
 Sussillo and Barak (Neural Comput., 2013)
@@ -343,18 +372,8 @@ def align_eigvecs(eig_vals, eig_vecs, fp_dist, \
     num_fixed_pts = eig_vals.shape[0]
 
     # find imaginary top eigenvals & store the top eigenvecs
-    im_idx = np.asarray([])
-    for i in range(num_fixed_pts):
-        lam = eig_vals[i]
-        V = eig_vecs[i]
-        max_idx = np.argmax(lam.real)
-        if i == 0:
-            Vs = V[:, max_idx]
-        else:
-            Vs = np.column_stack((Vs, V[:, max_idx]))
-        if np.abs(lam[max_idx].imag) > 1e-5:
-            im_idx = np.append(im_idx, i)
-    im_idx = im_idx.astype(int)
+    im_idx = get_im_idx(eig_vals, eig_vecs)
+    Vs = get_top_eigvecs(eig_vals, eig_vecs)
 
     # split the activity and positions by context
     X0 = X[map_targ==0]

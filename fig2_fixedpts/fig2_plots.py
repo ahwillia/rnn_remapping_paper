@@ -387,3 +387,138 @@ def plot_e(stable_idx, saddle_idx, **kwargs):
     ax1.tick_params(which='major', labelsize=tick_label, pad=0.5)
 
     return f, gs
+
+
+def plot_f(X, fixed_pts,
+            eig_vals, eig_vecs,
+            ex_idx, saddle_idx,
+            plot_all_pts=True,
+            axlim=2,
+            reflect_x=False,
+            reflect_y=False,
+            reflect_z=False):
+    '''
+    Plot some example fixed points with their eigenvectors.
+
+    Params
+    ------
+    X : ndarray, shape (n_obs, hidden_size)
+        RNN unit activity at each observation
+    fixed_pts : ndarray, shape (n_fixed_pts,)
+        approximate fixed points
+    Vs : ndarray, shape (hidden_size, n_fixed_pts)
+        eigenvector for the top eigenmode of 
+        each fixed point
+    ex_idx : ndarray, shape (n_examples,)
+        indices for the example fixed points
+    saddle_idx : ndarray, shape (n_fixed_pts,)
+        index for saddle points (for coloring points)
+    plot_all_pts : bool
+        plot all the fixed points (vs. just examples)
+    '''
+    # data params
+    num_posbins, num_neurons = X.shape
+    num_fixed_pts = fixed_pts.shape[0]
+    num_ex = ex_idx.shape[0]
+    not_ex_idx = np.setdiff1d(np.arange(num_fixed_pts), ex_idx)
+
+    # mean center
+    X_bar = X - np.mean(X, axis=0)
+
+    # get the normalized eigenvectors
+    Vs = rnn.get_top_eigvecs(eig_vals, eig_vecs)
+    norm_Vs = Vs / np.linalg.norm(Vs, axis=0)
+    norm_Vs = norm_Vs.real
+
+    # find PCs
+    pca = PCA(n_components=3)
+    x_, y_, z_ = pca.fit_transform(X_bar).T
+    x_fp, y_fp, z_fp = pca.transform(fixed_pts).T
+    x_v, y_v, z_v = pca.transform(norm_Vs[:, ex_idx].T).T
+
+    # Reflect axes if desired
+    if reflect_x:
+        x_fp *= -1
+    if reflect_y:
+        y_fp *= -1
+    if reflect_z:
+        z_fp *= -1
+
+    # fig params
+    f = plt.figure(figsize=(3.5, 1.75))
+    ax = plt.axes([0, 0, .6, 1.2], projection='3d')
+    DOT_SIZE = 5
+    VEC_LW=0.5
+    VEC_SCALE=0.4
+    PC_LW = 2
+
+    # example colors
+    EX_COLORS = []
+    for i in ex_idx:
+        if saddle_idx[i]:
+            EX_COLORS.append('xkcd:gold')
+        else:
+            EX_COLORS.append('xkcd:jungle green')
+
+    if plot_all_pts:
+        # plot the fixed points
+        sc = ax.scatter(
+            x_fp[not_ex_idx], y_fp[not_ex_idx], z_fp[not_ex_idx],
+            c='xkcd:gray', lw=0,
+            alpha=1, s=DOT_SIZE
+        )
+
+    # plot the eigenvectors
+    starts = np.column_stack([x_fp[ex_idx] - x_v*VEC_SCALE, 
+                              y_fp[ex_idx] - y_v*VEC_SCALE, 
+                              z_fp[ex_idx] - z_v*VEC_SCALE])
+    stops = np.column_stack([x_fp[ex_idx] + x_v*VEC_SCALE, 
+                              y_fp[ex_idx] + y_v*VEC_SCALE, 
+                              z_fp[ex_idx] + z_v*VEC_SCALE])
+
+    for i in range(num_ex):    
+        x = np.asarray([starts[i, 0], stops[i, 0]])
+        y = np.asarray([starts[i, 1], stops[i, 1]])
+        z = np.asarray([starts[i, 2], stops[i, 2]])
+        ve = ax.plot3D(x, y, z,
+                       color='k', alpha=1,
+                       lw=VEC_LW
+                      )
+
+    # plot the example fixed points
+    sc = ax.scatter(
+        x_fp[ex_idx], y_fp[ex_idx], z_fp[ex_idx],
+        facecolors=EX_COLORS, edgecolors='k',
+        lw=0.5, alpha=1, s=DOT_SIZE+1
+    )
+
+    # plot shadow
+    ax.scatter(
+        x_fp, y_fp, 
+        np.full(num_fixed_pts, -axlim),
+        color='k', alpha=.01, lw=0, s=DOT_SIZE)
+
+    # axis params
+    ax.set_xlim(-axlim, axlim)
+    ax.set_ylim(-axlim, axlim)
+    ax.set_zlim(-axlim, axlim)
+
+    # plot axes
+    axlim = axlim - 1.5
+    pc1 = np.asarray([[-axlim, axlim], [axlim, axlim], [-axlim, -axlim]])
+    pc2 = np.asarray([[axlim, axlim], [-axlim, axlim], [-axlim, -axlim]])
+    pc3 = np.asarray([[axlim, axlim], [axlim, axlim], [-axlim, axlim]])
+    for i, p in enumerate([pc1, pc2, pc3]):
+        p[0] = p[0] + 0.5
+        p[1] = p[1] + 3
+
+    ax.plot(*pc1, color="k", alpha=.8, lw=PC_LW)
+    ax.plot(*pc2, color="k", alpha=.8, lw=PC_LW)
+    ax.plot(*pc3, color="k", alpha=.8, lw=PC_LW)
+
+    ax.set_title('ex. eigenvectors',
+                  fontsize=10, pad=-20)
+    ax.view_init(azim=110, elev=30)
+    ax.axis("off")
+
+    return f, ax

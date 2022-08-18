@@ -956,7 +956,9 @@ def plot_supp_1(data_folder, model_IDs):
 
     return f, ax
 
-def plot_k_alt(data_folder, model_IDs):
+
+''' Geometry Supp Fig '''
+def plot_supp1b(data_folder, model_IDs):
     '''
     Alignment of the input and output weights to the
     remapping dimension and position subspace
