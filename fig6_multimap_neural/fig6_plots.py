@@ -11,12 +11,13 @@ from model_utils import sample_rnn_data, format_rnn_data
 from basic_analysis import tuning_curve_1d, compute_misalignment
 
 from analysis_neuro import tuning_curve
-from fig6_analysis import load_neural_data, format_neural_data
+from fig6_analysis import load_neural_data, format_neural_data, align_remap_dims
 
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from scipy.special import softmax
 from scipy import stats
+import itertools
 
 ''' general figure params '''
 # font sizes
@@ -30,6 +31,9 @@ c2 = 'xkcd:green blue'
 c3 = 'k'
 c4 = 'xkcd:saffron'
 all_map_colors = [c2, c1, c3, c4]
+
+# session colors
+all_session_colors = [c3, c1, c2, c4]
 
 
 def plot_a(d, cell_ID, all_FR, all_FR_sem, binned_pos):
@@ -68,16 +72,16 @@ def plot_a(d, cell_ID, all_FR, all_FR_sem, binned_pos):
     map1_idx = d['idx'][1, :]
 
     # figure parameters
-    gs = gridspec.GridSpec(8, 7, hspace=1.2, wspace=4)
-    f = plt.figure(figsize=(1.6, 1)) 
-    PT_SIZE = 0.3   
+    gs = gridspec.GridSpec(8, 8, hspace=1.2, wspace=4)
+    f = plt.figure(figsize=(2, 1.2)) 
+    PT_SIZE = 0.5   
     LW_MEAN = 0.5
     LW_SEM = 0.1   
     CLU_W = 4 
 
     # plot raster and tuning curves colored by map
-    ax2 = plt.subplot(gs[:-2, :3]) # raster
-    ax3 = plt.subplot(gs[-2:, :3]) # tuning curves
+    ax2 = plt.subplot(gs[:-2, -3:]) # raster
+    ax3 = plt.subplot(gs[-2:, -3:]) # tuning curves
     for j in range(n_maps):
         # raster
         map_idx = d['idx'][j, :].copy()
@@ -111,28 +115,25 @@ def plot_a(d, cell_ID, all_FR, all_FR_sem, binned_pos):
     ax3.set_xticks([0, 100, 200])
     ax3.set_xticklabels([0, 200, 400])
     ax3.set_yticks([0, 20])
-    ax2.tick_params(labelbottom=False, which='major',\
-                    labelsize=tick_label, pad=0.5)
+    ax2.tick_params(labelbottom=False, \
+                    which='major', labelsize=tick_label, pad=0.5)
     ax3.tick_params(which='major', labelsize=tick_label, pad=0.5)
-    
-    # labels
-    ax2.set_title('ex. cell', fontsize=title_size, pad=3)    
-    ax2.set_ylabel('trial', fontsize=axis_label, labelpad=1)
-    ax3.set_ylabel('FR', fontsize=axis_label, labelpad=6)
+    ax2.set_title('example\ncell', fontsize=title_size, pad=3)    
+    ax3.set_ylabel('FR', fontsize=axis_label, labelpad=0.2)
     ax3.set_xlabel('pos. (cm)', fontsize=axis_label, labelpad=1)
 
     # plot similarity matrix
-    ax1 = plt.subplot(gs[:-2, 3:])
+    ax1 = plt.subplot(gs[:-2, :-4])
     im = ax1.imshow(sim, clim=[0, 1], aspect='auto', cmap='gist_yarg')
-    ax1.set_title("network", fontsize=title_size, pad=3)
-    ax1.tick_params(labelleft=False, which='major', 
-                    labelsize=tick_label, pad=0.5)
+    ax1.set_title("network\nsimilarity", fontsize=title_size, pad=3)
+    ax1.tick_params(which='major', labelsize=tick_label, pad=0.5)
     ax1.set_yticks([0, trial_max//2, trial_max])
     ax1.set_xticks([0, trial_max//2, trial_max])
-    ax1.set_xlabel("map", fontsize=axis_label, labelpad=5)
+    ax1.set_ylabel('trial', fontsize=axis_label, labelpad=1)
+    ax1.set_xlabel("map", fontsize=axis_label, labelpad=6)
 
     # plot cluster assignments
-    ax0 = plt.subplot(gs[-1, 3:])
+    ax0 = plt.subplot(gs[-1, :-4])
     start_idx = np.append([0], remap_idx)
     end_idx = np.append(remap_idx, W.shape[0])
     map_colors = []
@@ -195,11 +196,11 @@ def plot_b(firing_rates, binned_pos,
         z_ *= -1
 
     # fig params
-    fig = plt.figure(figsize=(3, 2.1))
+    fig = plt.figure(figsize=(1.5, 1))
     ax = plt.axes([0, 0, .6, 1.2], projection='3d')
-    DOT_SIZE = 30
-    PC_LW = 3
-    SHADOW_LW = 6
+    DOT_SIZE = 15
+    PC_LW = 2
+    SHADOW_LW = 3
 
     # plot activity
     ax.scatter(
@@ -260,14 +261,19 @@ def plot_c(data_folder, session_IDs, num_maps):
     # data params
     n_sessions = len(session_IDs)
     n_maps = np.max(num_maps)
+    n_pairs = (np.math.factorial(n_maps)) // \
+                (np.math.factorial(2)*np.math.factorial(n_maps-2))
     dt = 0.02 # time bin
     pos_bin = 2 # cm
     n_pos_bins = 400 // pos_bin
 
-    alignment_scores = np.zeros((n_sessions, n_maps))
+    alignment_scores = np.zeros((n_sessions, n_pairs))
     alignment_scores.fill(np.nan)
     for i, s_id in enumerate(session_IDs):
+        # define the map pairs
         n_maps = num_maps[i]
+        m_ids = np.arange(n_maps)
+        m_pairs = list(itertools.combinations(m_ids,2))
 
         # load + format the data
         d = load_neural_data(data_folder, s_id)
@@ -286,26 +292,25 @@ def plot_c(data_folder, session_IDs, num_maps):
                                         dt, b=2, SEM=True)
 
         # get the manifolds for each map and compute misalignment
-        for j in range(n_maps):
-            m0_id = j
-            m1_id = (j+1)%n_maps
+        for j, (m0_id, m1_id) in enumerate(m_pairs):
             norm_align, _, _, _ = compute_misalignment(FRs[m0_id], FRs[m1_id])
             alignment_scores[i, j] = norm_align
 
     # define 1:2 as most aligned, 3:1 as least aligned
-    sort_alignment = np.sort(alignment_scores, axis=1)
+    # sort_alignment = np.sort(alignment_scores, axis=1)
+    
+    # summarize alignment overall
     flat_alignment = alignment_scores.ravel()
     flat_alignment = flat_alignment[~np.isnan(flat_alignment)]
-
     print(f'mean misalignment = {np.mean(flat_alignment):.2}')
     print(f'sem misalignment = {stats.sem(flat_alignment):.2}')
 
     # fig params 
-    f, ax = plt.subplots(1, 1, figsize=(1, 1))
+    f, ax = plt.subplots(1, 1, figsize=(0.8, 1))
     DOT_LW = 0.5
     DOT_SIZE = 5
     THRESH_LW = 2
-    JIT = np.random.randn(n_sessions) * 0.03 # jitter points
+    JIT = np.random.randn(n_pairs) * 0.03 # jitter points
     n_maps = np.max(num_maps)
 
     # plot the alignment scores for each pair
@@ -313,11 +318,17 @@ def plot_c(data_folder, session_IDs, num_maps):
     #                   showextrema=False)
     # for i, v in enumerate(V['bodies']):
     #     v.set_facecolor(all_map_colors[i])
-    for j in range(n_maps):
-        ax.scatter(np.full(n_sessions, j+1)+JIT, 
-                   sort_alignment[:, j], 
-                   facecolors='w', edgecolors=all_map_colors[j], 
-                   s=DOT_SIZE, lw=DOT_LW, alpha=1)
+    
+    # for j in range(n_maps): # color by map pair
+    #     ax.scatter(np.full(n_sessions, j+1)+JIT, 
+    #                sort_alignment[:, j], 
+    #                facecolors='w', edgecolors=all_map_colors[j], 
+    #                s=DOT_SIZE, lw=DOT_LW, alpha=1)
+    for i in range(n_sessions): # plot by session
+        ax.scatter(np.full(n_pairs, i+1)+JIT, 
+                   alignment_scores[i, :], 
+                   facecolors='none', edgecolors=all_session_colors[i], 
+                   s=DOT_SIZE, lw=DOT_LW, alpha=1, label=session_IDs[i])
         
     # plot the shuffle threshold
     ax.plot([0.8, 4.1], [1, 1], dashes=[1, 1], lw=THRESH_LW, color="k")
@@ -331,12 +342,77 @@ def plot_c(data_folder, session_IDs, num_maps):
     ax.spines['bottom'].set_bounds(1, 4)
     ax.set_xlim([0.6, 4.5])
     ax.set_xticks([1, 2, 3, 4])
+    ax.set_xticklabels(['A', 'B', 'C', 'D'])
     ax.set_ylim([0, 1.2])
     ax.set_yticks(np.arange(0, 1.4, 0.5))
     ax.tick_params(which='major', labelsize=tick_label, pad=0.5)
 
     # labels
     ax.set_ylabel('misalignment', fontsize=axis_label, labelpad=1)
-    ax.set_xticklabels(['1:2', '2:3', '3:1', '4:1'])
+    ax.set_xlabel('session ID', fontsize=axis_label, labelpad=1)
+    # ax.set_xticklabels(session_IDs, rotation=90)
+    # ax.legend(loc='upper left', bbox_to_anchor=(1.2, 1.2))
+
+    return f, ax
+
+
+def plot_d(data_folder, session_IDs, num_maps):
+    '''
+    Angle between the remapping dimensions
+    Computed for each pair of dimensions emanating from a given map
+
+    These dimensions form an n-dimensional simplex, where n = (number of maps - 1).
+    Thus, for maximal separation between remapping dimensions, we expect the angle
+    to be arccos(1/n). For 3 maps, this is 60 deg. For 4 maps, this is ~70.5 deg.
+    '''
+    # data params
+    n_sessions = len(session_IDs)
+    n_maps = np.max(num_maps)
+    n_pairs = (np.math.factorial(n_maps)) // \
+                (np.math.factorial(2)*np.math.factorial(n_maps-2))
+    dt = 0.02 # time bin
+    pos_bin = 2 # cm
+    n_pos_bins = 400 // pos_bin
+
+    # get the angles between remapping dims for all sessions
+    all_angles = align_remap_dims(data_folder, session_IDs, num_maps)
+
+    # fig params 
+    f, ax = plt.subplots(1, 1, figsize=(0.8, 1))
+    DOT_LW = 0.5
+    DOT_SIZE = 5
+    THRESH_LW = 1.5
+    n_maps = np.max(num_maps)
+
+    # plot the angles b/w remap dims by session
+    for i in range(n_sessions):
+        angles = all_angles[i]
+        n_angles = angles.shape[0]
+        JIT = np.random.randn(n_angles) * 0.03 # jitter points
+        ax.scatter(np.full(n_angles, i+1)+JIT, angles, 
+                   facecolors='none', edgecolors=all_session_colors[i], 
+                   s=DOT_SIZE, lw=DOT_LW, alpha=1, zorder=0)
+
+    # plot the expected angles
+    ax.scatter(np.arange(n_sessions) + 1, 
+               np.rad2deg(np.arccos(1/(num_maps-1))),
+               marker='_',
+               lw=THRESH_LW, color="k")
+
+    # ticks and lims
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['left'].set_bounds(0, 90)
+    ax.spines['bottom'].set_bounds(1, 4)
+    ax.set_xlim([0.6, 4.5])
+    ax.set_xticks([1, 2, 3, 4])
+    ax.set_xticklabels(['A', 'B', 'C', 'D'])
+    ax.set_ylim([0, 90])
+    ax.set_yticks(np.arange(0, 95, 30))
+    ax.tick_params(which='major', labelsize=tick_label, pad=0.5)
+
+    # labels
+    ax.set_ylabel('angle between\nremap dims', fontsize=axis_label, labelpad=1)
+    ax.set_xlabel('session ID', fontsize=axis_label, labelpad=1)
 
     return f, ax

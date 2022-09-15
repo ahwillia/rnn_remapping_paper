@@ -4,6 +4,7 @@ sys.path.append("../utils/")
 sys.path.append("../fig1_1d2map/")
 
 from scipy import stats
+import itertools
 
 from basic_analysis import tuning_curve_1d
 from dim_alignment import position_subspace, remapping_dim, cosine_sim, proj_aB
@@ -161,15 +162,27 @@ def filter_by_stability(d, unstable_thresh=0.25):
 def align_remap_dims(data_folder, session_IDs, num_maps):
     '''
     For each session, find the angle between the  remapping dimensions
+
+    Returns
+    -------
+    all_angles : list of arrays
+        the angles bewteen all remapping dimensions connected to the same node
     '''
     # data params
+    n_sessions = len(session_IDs)
+    n_maps = np.max(num_maps)
+    n_pairs = (np.math.factorial(n_maps)) // \
+                (np.math.factorial(2)*np.math.factorial(n_maps-2))
     dt = 0.02 # time bin
     pos_bin = 2 # cm
     n_pos_bins = 400 // pos_bin
 
-    avg_angle = np.zeros(len(session_IDs))
+    all_angles = []
     for i, s_id in enumerate(session_IDs):
+        # define the map pairs
         n_maps = num_maps[i]
+        m_ids = np.arange(n_maps)
+        m_pairs = list(itertools.combinations(m_ids,2))
 
         # load + format the data
         d = load_neural_data(data_folder, s_id)
@@ -187,21 +200,23 @@ def align_remap_dims(data_folder, session_IDs, num_maps):
                                             B[m_idx, :],
                                             dt, b=2, SEM=True)
         
-        remap_dims = []
-        for j in range(n_maps):
-            # pairwise comparison of maps
-            m0_id = j
-            m1_id = (j+1)%n_maps
-
-            # find the remapping dimension
-            remap_dims.append(remapping_dim(FRs[m0_id], FRs[m1_id]))
+        # find the remapping dimensions
+        remap_dims = {}
+        for m0_id, m1_id in m_pairs:
+            remap_dims[f'[{m0_id} {m1_id}]'] = remapping_dim(FRs[m0_id], FRs[m1_id])
         
-        angles = np.zeros(n_maps)
-        for j in range(n_maps):
-            angles[j] = cosine_sim(remap_dims[j], \
-                                    remap_dims[(j+1)%n_maps])
-        avg_angle[i] = np.rad2deg(np.arccos(np.abs(np.mean(angles))))
+        # calculate the angles between all dimensions sharing a node
+        all_pairs = list(itertools.combinations(np.asarray(m_pairs),2))
+        adj_pairs = []
+        for i, (j, k) in enumerate(all_pairs):
+            m_diff = np.setdiff1d(j, k)
+            if m_diff.shape[0] == 1:
+                adj_pairs.append((str(j), str(k)))
+        n_angles = len(adj_pairs)
+        angles = np.zeros(n_angles)
+        for j, (p0, p1) in enumerate(adj_pairs):
+            angles[j] = cosine_sim(remap_dims[p0], \
+                                    remap_dims[p1])
+        all_angles.append(np.rad2deg(np.arccos(np.abs(angles))))
     
-    session_avg = int(np.mean(avg_angle))
-    session_sem = stats.sem(avg_angle)
-    print(f'angle between remapping dims (mean, sem) = {session_avg} deg., {session_sem:.2} deg.')
+    return all_angles
