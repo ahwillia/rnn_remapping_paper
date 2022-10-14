@@ -651,20 +651,20 @@ def plot_i(data_folder, model_IDs, \
         all_var[i, :] = cum_var
         
         # PCA on each manifold
-        X0 = X[map_targ==0]
-        X1 = X[map_targ==1]
+        # X0 = X[map_targ==0]
+        # X1 = X[map_targ==1]
 
-        pca_0 = PCA().fit(X0)
-        var_0 = pca_0.explained_variance_
-        pct_var_0 = (var_0 / np.sum(var_0))
-        cum_var_0 = np.cumsum(pct_var_0)
-        all_var_0[i, :] = cum_var_0
+        # pca_0 = PCA().fit(X0)
+        # var_0 = pca_0.explained_variance_
+        # pct_var_0 = (var_0 / np.sum(var_0))
+        # cum_var_0 = np.cumsum(pct_var_0)
+        # all_var_0[i, :] = cum_var_0
 
-        pca_1 = PCA().fit(X1)
-        var_1 = pca_1.explained_variance_
-        pct_var_1 = (var_1 / np.sum(var_1))
-        cum_var_1 = np.cumsum(pct_var_1)
-        all_var_1[i, :] = cum_var_1
+        # pca_1 = PCA().fit(X1)
+        # var_1 = pca_1.explained_variance_
+        # pct_var_1 = (var_1 / np.sum(var_1))
+        # cum_var_1 = np.cumsum(pct_var_1)
+        # all_var_1[i, :] = cum_var_1
 
     # print the results
     avg_var = np.mean(all_var, axis=0)

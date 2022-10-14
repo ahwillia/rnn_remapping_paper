@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib import gridspec
 
 from plot_utils import ring_colormap
+from model_utils import sample_rnn_data, format_rnn_data
 from basic_analysis import tuning_curve_1d, compute_misalignment
 import fig2_align_analysis as rnn
 
@@ -92,18 +93,43 @@ def plot_d(data_folder, model_ID):
     xi_bar = xi_p - np.mean(xi_p, axis=0)
     pca = PCA().fit(xi_bar)
     var = pca.explained_variance_
-    total_var = np.sum(var)
-    pct_var = (var / total_var)
+    total_var_remap = np.sum(var)
+    pct_var = (var / total_var_remap)
     cum_var = np.cumsum(pct_var)
     x_, y_ = PCA(n_components=2).fit_transform(xi_bar).T
+
+    # get the variance of the full network
+    inputs, outputs, targets = sample_rnn_data(data_folder, model_ID)
+    X, _, _ = format_rnn_data(outputs["hidden_states"],\
+                                targets["map_targets"],\
+                                targets["pos_targets"])
+    X_bar = X - np.mean(X, axis=0)
+    pca = PCA().fit(X_bar)
+    var = pca.explained_variance_
+    total_var_full = np.sum(var)
+
+    # get the variance of the position subspaces
+    pos_ring = rnn.compute_pos_ring(data_folder, model_ID)
+    pos_bar = pos_ring - np.mean(pos_ring, axis=0)
+    pca = PCA().fit(pos_bar)
+    var = pca.explained_variance_
+    total_var_pos = np.sum(var)
+
+    # get the relative variance
+    rel_var = np.asarray([
+        total_var_remap / total_var_full,
+        total_var_pos / total_var_full
+    ])
 
     # fig params
     f = plt.figure(figsize=(2.1, 2.1))
     PC_LW = 1.5
     DOT_SIZE = 10
+    map_col = 'xkcd:scarlet'
+    pos_col = 'xkcd:cobalt blue'
 
     # plot the cumulative variance explained
-    ax0 = plt.axes([0.1, 0.65, 0.9, 0.3])
+    ax0 = plt.axes([0.1, 0.65, 0.4, 0.3])
     ax0.plot(np.arange(n_dims) + 1, cum_var, c='k', lw=PC_LW, zorder=0)
     ax0.scatter(np.arange(2) + 1,
                 cum_var[:2],
@@ -125,6 +151,28 @@ def plot_d(data_folder, model_ID):
     ax0.set_xlabel('dimension', fontsize=axis_label, labelpad=0)
     ax0.set_ylabel('cumulative\n var. explained', 
                    fontsize=axis_label, labelpad=1)
+
+    # plot the relative variance compared to the position variance
+    ax3 = plt.axes([0.75, 0.6, 0.15, 0.35])
+    bar_colors = [map_col, pos_col]
+    xcoords = [1, 2]
+    ax3.bar(xcoords, rel_var,
+        width=0.6, bottom=0,
+        color=bar_colors, alpha=1, edgecolor='k')
+    # ticks and lims
+    ax3.set_xticks([])
+    ax3.set_yticks(np.arange(0, 1.2, 0.5))
+    ax3.spines['right'].set_visible(False)
+    ax3.spines['top'].set_visible(False)
+    ax3.spines['left'].set_bounds(0, 1)
+    ax3.spines['bottom'].set_bounds(xcoords[0] - 0.6,
+                                      xcoords[-1] + 0.6)
+    ax3.tick_params(labelbottom=False, which='major', 
+                    labelsize=tick_label, pad=0.5)
+    ax3.set_xlim([xcoords[0] - 0.7,
+                    xcoords[-1] + 0.7])
+    ax3.set_ylim([0, 1])
+    ax3.set_ylabel('relative var.', fontsize=axis_label, labelpad=1)
 
     # plot the remap vectors against the first 2 PCs
     ax1 = plt.axes([0, 0, 0.5, 0.5])

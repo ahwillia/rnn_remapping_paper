@@ -90,6 +90,37 @@ def compute_remap_vectors(data_folder, m_id, \
 
     return xi_p, v, z_shuff
 
+def compute_pos_ring(data_folder, m_id, \
+                            n_pos_bins=50):
+    '''
+    Finds the average position ring across the two maps.
+
+    Returns
+    -------
+    pos_ring : ndarray (n_pos_bins, n_units)
+        activity comprising the average position ring
+    '''
+    model, _, _ = load_model_params(data_folder, m_id)
+    inputs, outputs, targets = sample_rnn_data(data_folder, m_id)
+    X, map_targ, pos_targ = format_rnn_data(outputs["hidden_states"],\
+                                            targets["map_targets"],\
+                                            targets["pos_targets"])
+
+    # split by context
+    X0 = X[map_targ==0]
+    X1 = X[map_targ==1]
+    pos0 = pos_targ[map_targ==0]
+    pos1 = pos_targ[map_targ==1]
+
+    # get the position-binned firing rates
+    tc_0, _ = tuning_curve_1d(X0, pos0, n_pos_bins=n_pos_bins)
+    tc_1, _ = tuning_curve_1d(X1, pos1, n_pos_bins=n_pos_bins)
+
+    # get the average position ring
+    pos_ring = 0.5 * (tc_0 + tc_1)
+
+    return pos_ring
+
 def remap_vector_geometry(data_folder, m_id, **kwargs):
     '''
     Finds the difference between the true and ideal remap vectors,

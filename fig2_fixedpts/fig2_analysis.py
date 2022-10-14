@@ -35,7 +35,7 @@ def load_fixed_pts(data_folder, model_ID, **kwargs):
     num_pts = fixed_pts.shape[0]
 
     # load the predicted positions
-    pos_pred_fp = np.load(f"{data_folder}{model_ID}/states_fixed_pt.npy")
+    pos_pred_fp = np.load(f"{data_folder}{model_ID}/pos_fixed_pt.npy")
     pos_pred_fp = np.arctan2(pos_pred_fp[:, 1], pos_pred_fp[:, 0])
 
     # filter out points where the velocity is too great
@@ -89,8 +89,8 @@ def filter_by_velocity(model, task_params, \
 
 
 def eig_vec_examples(stable_idx, saddle_idx, \
-                        im_idx, fp_dist, \
-                        n_ex = 16, map_thresh=0.1):
+                        im_idx, fp_dist, pos_pred_fp, \
+                        n_ex = 16):
     '''
     Get the indices for example fixed points for panels F & G.
 
@@ -107,10 +107,7 @@ def eig_vec_examples(stable_idx, saddle_idx, \
     stable_saddle_idx[im_idx] = False
 
     # index by map
-    map_1_idx = np.round(fp_dist, 1) < -map_thresh
-    map_2_idx = np.round(fp_dist, 1) > map_thresh
-    middle_idx = (np.round(fp_dist, 1) > -1 + map_thresh) \
-                    & (np.round(fp_dist, 1) < 1 - map_thresh)
+    map_1_idx, map_2_idx, middle_idx = idx_by_map(fp_dist)
 
     # set the example point for each position bin
     m1_idx = np.zeros(n_ex)
@@ -151,6 +148,14 @@ def eig_vec_examples(stable_idx, saddle_idx, \
 
     return ex_idx, m1_idx, mid_idx, m2_idx
 
+def idx_by_map(fp_dist, map_thresh=0.2):
+    center = np.median(fp_dist)
+    map_1_idx = np.round(fp_dist, 1) < (center - map_thresh)
+    map_2_idx = np.round(fp_dist, 1) > (center + map_thresh)
+    middle_idx = (np.round(fp_dist, 1) > (center - map_thresh)) \
+                    & (np.round(fp_dist, 1) < (center + map_thresh))
+
+    return map_1_idx, map_2_idx, middle_idx
 
 def get_top_eigvecs(eig_vals, eig_vecs):
     '''
@@ -174,6 +179,7 @@ def get_im_idx(eig_vals, eig_vecs):
     Indices for fixed points whose largest eigenvalue
     is imaginary.
     '''
+    num_fixed_pts = eig_vals.shape[0]
     im_idx = np.asarray([])
     for i in range(num_fixed_pts):
         lam = eig_vals[i]
@@ -419,15 +425,15 @@ def align_eigvecs(eig_vals, eig_vecs, fp_dist, \
             w_norm = w / np.linalg.norm(w)
             v_sub = np.stack((u_norm, w_norm), axis=-1)
             
-            r_angle = dim_alignment.proj_aB(remap_dim, v_sub)
+            r_angle = proj_aB(remap_dim, v_sub)
             p_angle = subspace_angles(p_subspace, v_sub)
             p_angle = np.cos(np.max(p_angle))
             
         else:
             u = v - np.mean(v)
             u_norm = u / np.linalg.norm(u)
-            r_angle = dim_alignment.cosine_sim(remap_dim, u_norm)
-            p_angle = dim_alignment.proj_aB(u_norm, p_subspace)
+            r_angle = cosine_sim(remap_dim, u_norm)
+            p_angle = proj_aB(u_norm, p_subspace)
         
         remap_angles = np.append(remap_angles, r_angle)
         pos_angles = np.append(pos_angles, p_angle)

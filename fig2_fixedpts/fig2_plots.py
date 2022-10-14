@@ -9,7 +9,9 @@ from mpl_toolkits.mplot3d import Axes3D
 from plot_utils import simple_cmap, ring_colormap
 from model_utils import sample_rnn_data, format_rnn_data
 from basic_analysis import tuning_curve_1d, compute_misalignment
+from dim_alignment import position_subspace
 import fig2_analysis as rnn
+from fig2_analysis import align_eigvecs
 
 from scipy.special import softmax
 from sklearn.decomposition import PCA
@@ -319,7 +321,10 @@ def plot_d(Js, ex_idx):
     return f, gs
 
 
-def plot_e(stable_idx, saddle_idx, **kwargs):
+# def plot_e(stable_idx, saddle_idx, **kwargs): # todo: figure out why this isn't working
+def plot_e(stable_idx, saddle_idx, \
+            eig_vals, eig_vecs, fp_dist,\
+            X, map_targ, pos_targ):
     '''
     Plot the alignment of the eigenvectors to either the
     remapping dimension or position subspace.
@@ -333,7 +338,9 @@ def plot_e(stable_idx, saddle_idx, **kwargs):
     **kwargs for align_eigvecs
     '''
     # data params
-    remap_angles, pos_angles = rnn.align_eigvecs(**kwargs)
+    # remap_angles, pos_angles = align_eigvecs(**kwargs)
+    remap_angles, pos_angles = align_eigvecs(eig_vals, eig_vecs, fp_dist,\
+                                                X, map_targ, pos_targ)
 
     # fig params
     f = plt.figure(figsize=(1, 1.8))
@@ -406,9 +413,11 @@ def plot_f(X, fixed_pts,
         RNN unit activity at each observation
     fixed_pts : ndarray, shape (n_fixed_pts,)
         approximate fixed points
-    Vs : ndarray, shape (hidden_size, n_fixed_pts)
-        eigenvector for the top eigenmode of 
+    eig_vals : ndarray, shape (n_fixed_pts)
+        eigenvalue for the top eigenmode of 
         each fixed point
+    eig_vecs : ndarray, shape (hidden_size, n_fixed_pts)
+        eigenvectors for each fixed point
     ex_idx : ndarray, shape (n_examples,)
         indices for the example fixed points
     saddle_idx : ndarray, shape (n_fixed_pts,)
@@ -522,3 +531,319 @@ def plot_f(X, fixed_pts,
     ax.axis("off")
 
     return f, ax
+
+
+def plot_g(X, map_targ, pos_targ,
+            fixed_pts, fp_dist,
+            eig_vals, eig_vecs,
+            m1_idx, m2_idx, 
+            saddle_idx,
+            m1_i = 0, m2_i = 0):
+    '''
+    Plot some example fixed points with their eigenvectors
+    near each map, projected onto each map.
+
+    Params
+    ------
+    X : ndarray, shape (n_obs, hidden_size)
+        RNN unit activity at each observation
+    fixed_pts : ndarray, shape (n_fixed_pts,)
+        approximate fixed points
+    eig_vals : ndarray, shape (n_fixed_pts)
+        eigenvalue for the top eigenmode of 
+        each fixed point
+    eig_vecs : ndarray, shape (hidden_size, n_fixed_pts)
+        eigenvectors for each fixed point
+    m1_idx, m2_idx : ndarray, shape (n_examples,)
+        indices for the example fixed points in each map
+    saddle_idx : ndarray, shape (n_fixed_pts,)
+        index for saddle points (for coloring points)
+    m1_i, m2_i : int
+        indices for zoom panels
+    '''
+    # data params
+    num_posbins, num_neurons = X.shape
+    num_fixed_pts = fixed_pts.shape[0]
+    n_ex = m1_idx.shape[0]
+
+    # mean center
+    X_bar = X - np.mean(X, axis=0)
+
+    # get the normalized eigenvectors
+    Vs = rnn.get_top_eigvecs(eig_vals, eig_vecs)
+    norm_Vs = Vs / np.linalg.norm(Vs, axis=0)
+    norm_Vs = norm_Vs.real
+
+    # get the tuning curves for each map
+    X0 = X[map_targ==0]
+    X1 = X[map_targ==1]
+    pos0 = pos_targ[map_targ==0]
+    pos1 = pos_targ[map_targ==1]
+    X0_tc, _ = tuning_curve_1d(X0, pos_targ[map_targ==0], n_pos_bins=250)
+    X1_tc, _ = tuning_curve_1d(X1, pos_targ[map_targ==1], n_pos_bins=250)
+
+    # divide by map
+    map_1_idx, map_2_idx, _ = rnn.idx_by_map(fp_dist)
+    fp_m1 = fixed_pts[map_1_idx]
+    fp_m2 = fixed_pts[map_2_idx]
+    v_m1 = norm_Vs[:, map_1_idx]
+    v_m2 = norm_Vs[:, map_2_idx]
+
+    # project onto the appropriate subspace
+    m1_subspace = position_subspace(X0_tc)
+    m2_subspace = position_subspace(X1_tc)
+    x_m1_pos = m1_subspace.T @ X0_tc.T
+    x_m2_pos = m2_subspace.T @ X1_tc.T
+    fp_m1_pos = m1_subspace.T @ fp_m1.T
+    fp_m2_pos = m2_subspace.T @ fp_m2.T
+    v_m1_pos = m1_subspace.T @ v_m1
+    v_m2_pos = m2_subspace.T @ v_m2
+
+    # find the examples as indexed into each map
+    m1_bool = np.zeros(num_fixed_pts)
+    m1_bool[m1_idx.astype(int)] = True
+    m1_bool = m1_bool[map_1_idx].astype(bool)
+    m1_ex = np.where(m1_bool)[0]
+
+    m2_bool = np.zeros(num_fixed_pts)
+    m2_bool[m2_idx.astype(int)] = True
+    m2_bool = m2_bool[map_2_idx].astype(bool)
+    m2_ex = np.where(m2_bool)[0]
+
+    # get the scaled eigenvectors
+    VEC_SCALE = 0.6
+    starts_m1 = np.column_stack([fp_m1_pos[0][m1_bool] - v_m1_pos[0][m1_bool]*VEC_SCALE,
+                                 fp_m1_pos[1][m1_bool] - v_m1_pos[1][m1_bool]*VEC_SCALE])
+    stops_m1 = np.column_stack([fp_m1_pos[0][m1_bool] + v_m1_pos[0][m1_bool]*VEC_SCALE,
+                                 fp_m1_pos[1][m1_bool] + v_m1_pos[1][m1_bool]*VEC_SCALE])
+    starts_m2 = np.column_stack([fp_m2_pos[0][m2_bool] - v_m2_pos[0][m2_bool]*VEC_SCALE,
+                                 fp_m2_pos[1][m2_bool] - v_m2_pos[1][m2_bool]*VEC_SCALE])
+    stops_m2 = np.column_stack([fp_m2_pos[0][m2_bool] + v_m2_pos[0][m2_bool]*VEC_SCALE,
+                                 fp_m2_pos[1][m2_bool] + v_m2_pos[1][m2_bool]*VEC_SCALE])
+
+    # fig params
+    f = plt.figure(figsize=(2, 2))
+    gs = gridspec.GridSpec(2, 2, hspace=0.4, wspace=0.4)
+    DOT_SIZE = 8
+    VEC_LW = 0.7
+    TC_LW = 1.5
+    TC_COLOR = 'xkcd:indigo'
+
+    # example colors
+    EX_COLORS = []
+    for i in np.concatenate((m1_idx.astype(int), m2_idx.astype(int))):
+        if saddle_idx[i]:
+            EX_COLORS.append('xkcd:gold')
+        else:
+            EX_COLORS.append('xkcd:jungle green')
+
+    # plot map 1
+    ax0 = plt.subplot(gs[0, 0])
+    ax0.plot( # tuning curve
+        x_m1_pos[0], x_m1_pos[1],
+        ls='-', c=TC_COLOR, lw=TC_LW,
+        alpha=0.5, zorder=0
+    )
+    ax0.scatter( # fixed points
+        fp_m1_pos[0], fp_m1_pos[1],
+        c='xkcd:gray', lw=0,
+        alpha=1, s=DOT_SIZE, zorder=1
+    )
+    ax0.scatter( # examples
+        fp_m1_pos[0][m1_bool], 
+        fp_m1_pos[1][m1_bool],
+        facecolors=EX_COLORS[:n_ex], 
+        edgecolors='k', lw=0.5, alpha=1, 
+        s=DOT_SIZE*1.5, zorder=2
+    )
+    for i in range(n_ex):
+        y = np.asarray([starts_m1[i, 0], stops_m1[i, 0]])
+        z = np.asarray([starts_m1[i, 1], stops_m1[i, 1]])
+        ax0.plot( # eig.vectors
+            y, z,
+            color='k', alpha=1,
+            lw=VEC_LW, zorder=3
+        )
+        
+    # ticks and labels
+    ax0.spines['right'].set_visible(False)
+    ax0.spines['top'].set_visible(False)
+    xlim1 = ax0.get_xlim()
+    ylim1 = ax0.get_ylim()
+    ax0.spines['left'].set_bounds(ylim1[0], 1.5)
+    ax0.spines['bottom'].set_bounds(xlim1[0], 1.5)
+    ax0.set_xticks([])
+    ax0.set_yticks([])
+    ax0.set_ylabel('dim. 1', fontsize=axis_label, labelpad=1)
+    ax0.set_xlabel('dim. 2', fontsize=axis_label, labelpad=2)
+    ax0.set_title('map 1', fontsize=title_size, pad=2)
+
+    # plot map 2
+    ax1 = plt.subplot(gs[0, 1])
+    ax1.plot( # tuning curve
+        x_m2_pos[0], x_m2_pos[1],
+        ls='-', c=TC_COLOR, lw=TC_LW,
+        alpha=0.5, zorder=0
+    )
+    ax1.scatter( # fixed points
+        fp_m2_pos[0], fp_m2_pos[1],
+        c='xkcd:gray', lw=0,
+        alpha=1, s=DOT_SIZE, zorder=1
+    )
+    ax1.scatter( # examples
+        fp_m2_pos[0][m2_bool], 
+        fp_m2_pos[1][m2_bool],
+        facecolors=EX_COLORS[-n_ex:], 
+        edgecolors='k', lw=0.5, alpha=1, 
+        s=DOT_SIZE*1.5, zorder=2
+    )
+    for i in range(n_ex):
+        y = np.asarray([starts_m2[i, 0], stops_m2[i, 0]])
+        z = np.asarray([starts_m2[i, 1], stops_m2[i, 1]])
+        ax1.plot( # eig.vectors
+            y, z,
+            color='k', alpha=1,
+            lw=VEC_LW, zorder=3
+        )
+        
+    # ticks and labels
+    ax1.spines['right'].set_visible(False)
+    ax1.spines['top'].set_visible(False)
+    xlim2 = ax1.get_xlim()
+    ylim2 = ax1.get_ylim()
+    ax1.spines['left'].set_bounds(ylim2[0], 1.5)
+    ax1.spines['bottom'].set_bounds(xlim2[0], 1.5)
+    ax1.set_xticks([])
+    ax1.set_yticks([])
+    ax1.set_ylabel('dim. 1', fontsize=axis_label, labelpad=1)
+    ax1.set_xlabel('dim. 2', fontsize=axis_label, labelpad=2)
+    ax1.set_title('map 2', fontsize=title_size, pad=2)
+
+    # zoom map 1
+    y_coords = np.asarray([fp_m1_pos[0][m1_bool][m1_i] - 0.5, 
+                          fp_m1_pos[0][m1_bool][m1_i] + 0.5])
+    z_coords = np.asarray([fp_m1_pos[1][m1_bool][m1_i] - 0.5, 
+                          fp_m1_pos[1][m1_bool][m1_i] + 0.5])
+    ax0.hlines(z_coords, 
+               [y_coords[0], y_coords[0]],
+               [y_coords[1], y_coords[1]],
+               colors='xkcd:deep red', lw=0.5)
+    ax0.vlines(y_coords, 
+               [z_coords[0], z_coords[0]],
+               [z_coords[1], z_coords[1]],
+               colors='xkcd:deep red', lw=0.5)
+
+    ax2 = plt.subplot(gs[1, 0])
+    ax2.plot( # tuning curve
+        x_m1_pos[0], x_m1_pos[1],
+        ls='-', c=TC_COLOR,
+        lw=TC_LW*3,
+        alpha=0.5, zorder=0
+    )
+    ax2.scatter( # fixed points
+        fp_m1_pos[0], fp_m1_pos[1],
+        c='xkcd:gray', lw=0,
+        alpha=1, s=DOT_SIZE*2, zorder=1
+    )
+    ax2.scatter( # examples
+        fp_m1_pos[0][m1_bool][m1_i],
+        fp_m1_pos[1][m1_bool][m1_i],
+        facecolors=EX_COLORS[m1_i], edgecolors='k',
+        lw=1, alpha=1, s=DOT_SIZE*4, zorder=2
+    )
+
+    y = np.asarray([starts_m1[m1_i, 0], stops_m1[m1_i, 0]])
+    z = np.asarray([starts_m1[m1_i, 1], stops_m1[m1_i, 1]])
+    ax2.plot( # eig.vectors
+        y, z,
+        color='k', alpha=1,
+        lw=VEC_LW*2, zorder=3
+    )
+
+    # plot pos estimate COULD BE MORE RIGOROUS
+    y_center = np.mean(fp_m1_pos[0])
+    z_center = np.mean(fp_m1_pos[1])
+    ax2.plot( # eig.vectors
+        [y_center, fp_m1_pos[0][m1_bool][m1_i]],
+        [z_center, fp_m1_pos[1][m1_bool][m1_i]],
+        color='k', linestyle=':',
+        alpha=1, lw=VEC_LW*2, zorder=3
+    )
+        
+    # ticks and labels
+    ax2.spines['right'].set_color('xkcd:deep red')
+    ax2.spines['top'].set_color('xkcd:deep red')
+    ax2.spines['left'].set_color('xkcd:deep red')
+    ax2.spines['bottom'].set_color('xkcd:deep red')
+    ax2.set_xticks([])
+    ax2.set_yticks([])
+    ax2.set_xlim(y_coords)
+    ax2.set_ylim(z_coords)
+
+    # zoom map 2
+    y_coords = np.asarray([fp_m2_pos[0][m2_bool][m2_i] - 0.5, 
+                          fp_m2_pos[0][m2_bool][m2_i] + 0.5])
+    z_coords = np.asarray([fp_m2_pos[1][m2_bool][m2_i] - 0.5, 
+                          fp_m2_pos[1][m2_bool][m2_i] + 0.5])
+    ax1.hlines(z_coords, 
+               [y_coords[0], y_coords[0]],
+               [y_coords[1], y_coords[1]],
+               colors='xkcd:deep red', lw=0.5)
+    ax1.vlines(y_coords, 
+               [z_coords[0], z_coords[0]],
+               [z_coords[1], z_coords[1]],
+               colors='xkcd:deep red', lw=0.5)
+
+    ax3 = plt.subplot(gs[1, 1])
+    ax3.plot( # tuning curve
+        x_m2_pos[0], x_m2_pos[1],
+        ls='-', c=TC_COLOR,
+        lw=TC_LW*3,
+        alpha=0.5, zorder=0
+    )
+    ax3.scatter( # fixed points
+        fp_m2_pos[0], fp_m2_pos[1],
+        c='xkcd:gray', lw=0,
+        alpha=1, s=DOT_SIZE*2, zorder=1
+    )
+    ax3.scatter( # examples
+        fp_m2_pos[0][m2_bool][m2_i],
+        fp_m2_pos[1][m2_bool][m2_i],
+        facecolors=EX_COLORS[:-n_ex][m2_i], edgecolors='k',
+        lw=1, alpha=1, s=DOT_SIZE*4, zorder=2
+    )
+
+    y = np.asarray([starts_m2[m2_i, 0], stops_m2[m2_i, 0]])
+    z = np.asarray([starts_m2[m2_i, 1], stops_m2[m2_i, 1]])
+    ax3.plot( # eig.vectors
+        y, z,
+        color='k', alpha=1,
+        lw=VEC_LW*2, zorder=3
+    )
+
+    # plot pos estimate COULD BE MORE RIGOROUS
+    y_center = np.mean(fp_m2_pos[0])
+    z_center = np.mean(fp_m2_pos[1])
+    ax3.plot( # eig.vectors
+        [y_center, fp_m2_pos[0][m2_bool][m2_i]],
+        [z_center, fp_m2_pos[1][m2_bool][m2_i]],
+        color='k', linestyle=':',
+        alpha=1, lw=VEC_LW*2, zorder=3
+    )
+        
+    # ticks and labels
+    ax3.spines['right'].set_color('xkcd:deep red')
+    ax3.spines['top'].set_color('xkcd:deep red')
+    ax3.spines['left'].set_color('xkcd:deep red')
+    ax3.spines['bottom'].set_color('xkcd:deep red')
+    ax3.set_xticks([])
+    ax3.set_yticks([])
+    ax3.set_xlim(y_coords)
+    ax3.set_ylim(z_coords)
+
+    ax0.set_xlim(xlim1)
+    ax0.set_ylim(ylim1)
+    ax1.set_xlim(xlim2)
+    ax1.set_ylim(ylim2)
+
+    return f, gs
