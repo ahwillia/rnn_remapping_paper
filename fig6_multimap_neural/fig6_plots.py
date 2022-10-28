@@ -36,7 +36,7 @@ all_map_colors = [c2, c1, c3, c4]
 all_session_colors = [c3, c1, c2, c4]
 
 
-def plot_a(d, cell_ID, all_FR, all_FR_sem, binned_pos):
+def plot_b(d, cell_ID, all_FR, all_FR_sem, binned_pos):
     '''
     Example of remapping for a 3-map session:
     raster and TC for one unit
@@ -152,7 +152,7 @@ def plot_a(d, cell_ID, all_FR, all_FR_sem, binned_pos):
     return f, gs
 
 
-def plot_b(firing_rates, binned_pos,
+def plot_c(firing_rates, binned_pos,
     num_points=1000,
     axlim=2,
     reflect_x=False,
@@ -248,7 +248,7 @@ def plot_b(firing_rates, binned_pos,
     return fig, ax
 
 
-def plot_c(data_folder, session_IDs, num_maps):
+def plot_d(data_folder, session_IDs, num_maps):
     '''
     Misalignment scores for manifolds from all multimap sessions
     Scores are normalized:
@@ -356,7 +356,7 @@ def plot_c(data_folder, session_IDs, num_maps):
     return f, ax
 
 
-def plot_d(data_folder, session_IDs, num_maps):
+def plot_e(data_folder, session_IDs, num_maps):
     '''
     Angle between the remapping dimensions
     Computed for each pair of dimensions emanating from a given map
@@ -394,10 +394,8 @@ def plot_d(data_folder, session_IDs, num_maps):
                    s=DOT_SIZE, lw=DOT_LW, alpha=1, zorder=0)
 
     # plot the expected angles
-    ax.scatter(np.arange(n_sessions) + 1, 
-               np.rad2deg(np.arccos(1/(num_maps-1))),
-               marker='_',
-               lw=THRESH_LW, color="k")
+    ax.plot([0.8, 4.1], [60, 60], dashes=[1, 1], 
+                lw=THRESH_LW, color="k")
 
     # ticks and lims
     ax.spines['right'].set_visible(False)

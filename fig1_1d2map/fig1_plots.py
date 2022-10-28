@@ -284,7 +284,7 @@ def plot_e(inp_vel, inp_remaps):
     # plot context cue inputs
     ax2 = plt.subplot(gs[2])
     ax3 = plt.subplot(gs[3])
-    ax2.set_title('binary context cues',
+    ax2.set_title('binary state cues',
                       fontsize=title_size, pad=0)
     ax2.plot(inp_remaps[:, 0], 
              c=c1, lw=CUE_LW)
@@ -345,10 +345,10 @@ def plot_f(pos_targets, pos_outputs, map_logits):
     ax1 = plt.subplot(gs[1])
     ax1.set_axis_off()
 
-    # plot context cue inputs
+    # plot latent state estimate
     ax2 = plt.subplot(gs[2])
     ax3 = plt.subplot(gs[3])
-    ax2.set_title('context estimate',
+    ax2.set_title('latent state estimate',
                       fontsize=title_size, pad=0)
     ax2.plot(softmax(map_logits, axis=1)[:, 0], 
              c=c1, lw=CTXT_LW)
@@ -883,7 +883,7 @@ def plot_k(data_folder, model_IDs):
     ax[1].tick_params(labelbottom=False, labelleft=False,
                       which='major', labelsize=tick_label, pad=0.5)
     ax[0].set_ylabel('cosine sim.', fontsize=axis_label, labelpad=1)
-    ax[0].set_title('context\ntuning dim.', fontsize=axis_label, pad=3)
+    ax[0].set_title('state\ntuning dim.', fontsize=axis_label, pad=3)
     ax[1].set_title('position\ntuning dim.', fontsize=axis_label, pad=3)
 
     return f, ax
@@ -1024,7 +1024,7 @@ def plot_supp1b(data_folder, model_IDs):
     ax[1].set_ylabel('cosine similarity',
                         horizontalalignment='left', x=0.3,
                         fontsize=axis_label, labelpad=1)
-    ax[0].set_title('context tuning dim.', fontsize=axis_label, pad=5)
+    ax[0].set_title('state tuning dim.', fontsize=axis_label, pad=5)
     ax[1].set_title('pos. tuning dim.', fontsize=axis_label, pad=5)
 
     return f, ax

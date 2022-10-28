@@ -71,7 +71,7 @@ def plot_a1(inp_vel, inp_remaps):
     for i in range(n_maps):
         ax = plt.subplot(gs[i+3])
         if i == 0:
-            ax.set_title('context',
+            ax.set_title('state cues',
                           fontsize=axis_label, pad=0)
         ax.plot(inp_remaps[:, i], 
                  c=map_colors[i], lw=CUE_LW)
@@ -140,7 +140,7 @@ def plot_a2(pos_targets, pos_outputs, map_logits):
     for i in range(n_maps):
         ax = plt.subplot(gs[i+3])
         if i == 0:
-            ax.set_title('context',
+            ax.set_title('latent state',
                          fontsize=axis_label, pad=0)
         ax.plot(softmax(map_logits, axis=1)[:, i],
                 c=map_colors[i], lw=CTXT_LW)
@@ -652,7 +652,7 @@ def plot_g(data_folder, model_IDs):
     ax[1].tick_params(labelbottom=False, labelleft=False,
                       which='major', labelsize=tick_label, pad=0.5)
     ax[0].set_ylabel('cosine sim.', fontsize=axis_label, labelpad=1)
-    ax[0].set_title('context\ndim.', fontsize=axis_label, pad=3)
+    ax[0].set_title('state\ndim.', fontsize=axis_label, pad=3)
     ax[1].set_title('pos.\n dim.', fontsize=axis_label, pad=3)
 
     return f, ax
