@@ -208,7 +208,7 @@ def align_remap_dims(data_folder, session_IDs, num_maps):
         # calculate the angles between all dimensions sharing a node
         all_pairs = list(itertools.combinations(np.asarray(m_pairs),2))
         adj_pairs = []
-        for i, (j, k) in enumerate(all_pairs):
+        for j, k in all_pairs:
             m_diff = np.setdiff1d(j, k)
             if m_diff.shape[0] == 1:
                 adj_pairs.append((str(j), str(k)))

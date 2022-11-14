@@ -295,9 +295,6 @@ def plot_d(data_folder, session_IDs, num_maps):
         for j, (m0_id, m1_id) in enumerate(m_pairs):
             norm_align, _, _, _ = compute_misalignment(FRs[m0_id], FRs[m1_id])
             alignment_scores[i, j] = norm_align
-
-    # define 1:2 as most aligned, 3:1 as least aligned
-    # sort_alignment = np.sort(alignment_scores, axis=1)
     
     # summarize alignment overall
     flat_alignment = alignment_scores.ravel()
@@ -313,17 +310,6 @@ def plot_d(data_folder, session_IDs, num_maps):
     JIT = np.random.randn(n_pairs) * 0.03 # jitter points
     n_maps = np.max(num_maps)
 
-    # plot the alignment scores for each pair
-    # V = ax.violinplot(sort_alignment, 
-    #                   showextrema=False)
-    # for i, v in enumerate(V['bodies']):
-    #     v.set_facecolor(all_map_colors[i])
-    
-    # for j in range(n_maps): # color by map pair
-    #     ax.scatter(np.full(n_sessions, j+1)+JIT, 
-    #                sort_alignment[:, j], 
-    #                facecolors='w', edgecolors=all_map_colors[j], 
-    #                s=DOT_SIZE, lw=DOT_LW, alpha=1)
     for i in range(n_sessions): # plot by session
         ax.scatter(np.full(n_pairs, i+1)+JIT, 
                    alignment_scores[i, :], 
@@ -368,8 +354,6 @@ def plot_e(data_folder, session_IDs, num_maps):
     # data params
     n_sessions = len(session_IDs)
     n_maps = np.max(num_maps)
-    n_pairs = (np.math.factorial(n_maps)) // \
-                (np.math.factorial(2)*np.math.factorial(n_maps-2))
     dt = 0.02 # time bin
     pos_bin = 2 # cm
     n_pos_bins = 400 // pos_bin
