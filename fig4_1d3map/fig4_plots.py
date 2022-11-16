@@ -437,7 +437,6 @@ def plot_f(data_folder, model_IDs):
                                             targets["pos_targets"])
     n_models = len(model_IDs)
     n_maps = np.max(np.unique(map_targ)) + 1
-    hidden_size = X.shape[-1]
 
     alignment_scores = np.zeros((n_models, n_maps))
     for i, m_id in enumerate(model_IDs):

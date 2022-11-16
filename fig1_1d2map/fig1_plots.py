@@ -602,7 +602,7 @@ def plot_i(data_folder, model_IDs, \
             most_var_thresh=0.90):
     '''
     Average variance explained by each component across maps
-    for both maps together and for each map alone (insets).
+    for both maps together.
 
     Params
     ------

@@ -34,12 +34,15 @@ def load_neural_data(data_folder, session_ID):
 
     return d
 
-def format_neural_data(d, n_maps=3, filter_stability=True, unstable_thresh=0.25):
+def format_neural_data(d, n_maps=3,\
+                        filter_stability=True,\
+                        unstable_thresh=0.25):
     '''
     Performs k-means clustering to divide the session into maps
     Computes the network-wide trial-trial spatial similarity
 
     If filter_stability=True, filters out unstable trials
+    using the threshold defined by unstable_thresh
     '''
     # use k-means to get the map label for each trial
     Y = d['Y'].copy()
@@ -52,10 +55,12 @@ def format_neural_data(d, n_maps=3, filter_stability=True, unstable_thresh=0.25)
     map_idx = spk.get_map_idx(W, trials)
     d['idx'] = map_idx
 
+    # get the trial-trial network similarity
+    Y = d['Y'].copy()
+    d['sim'] = spk.spatial_similarity(Y)
+
     if filter_stability:
         # filter the data to remove unstable trials
-        Y = d['Y'].copy()
-        d['sim'] = spk.spatial_similarity(Y)
         d = filter_by_stability(d, unstable_thresh=unstable_thresh)
 
         # recompute the observation idx for each map

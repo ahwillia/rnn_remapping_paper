@@ -296,11 +296,13 @@ def plot_d(data_folder, session_IDs, num_maps):
             norm_align, _, _, _ = compute_misalignment(FRs[m0_id], FRs[m1_id])
             alignment_scores[i, j] = norm_align
     
-    # summarize alignment overall
+    # summarize alignment overall and per session
     flat_alignment = alignment_scores.ravel()
     flat_alignment = flat_alignment[~np.isnan(flat_alignment)]
-    print(f'mean misalignment = {np.mean(flat_alignment):.2}')
-    print(f'sem misalignment = {stats.sem(flat_alignment):.2}')
+    print(f'overall mean misalignment = {np.mean(flat_alignment):.2}')
+    print(f'overall sem misalignment = {stats.sem(flat_alignment):.2}')
+    for i, s_id in enumerate(session_IDs):
+        print(f'{s_id} mean misalignment = {np.nanmean(alignment_scores[i]):.2}')
 
     # fig params 
     f, ax = plt.subplots(1, 1, figsize=(0.8, 1))
