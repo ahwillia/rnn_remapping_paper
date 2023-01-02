@@ -110,7 +110,7 @@ def plot_a(X, fixed_pts, pos_targets,
     ax.scatter(
         x_fp, y_fp, 
         np.full(num_points, -axlim),
-        color='k', alpha=.01, lw=0, s=DOT_SIZE)
+        color='k', alpha=.007, lw=0, s=DOT_SIZE)
 
     # axis params
     ax.set_xlim(-axlim, axlim)
@@ -505,7 +505,7 @@ def plot_f(X, fixed_pts,
     ax.scatter(
         x_fp, y_fp, 
         np.full(num_fixed_pts, -axlim),
-        color='k', alpha=.01, lw=0, s=DOT_SIZE)
+        color='k', alpha=.007, lw=0, s=DOT_SIZE)
 
     # axis params
     ax.set_xlim(-axlim, axlim)
