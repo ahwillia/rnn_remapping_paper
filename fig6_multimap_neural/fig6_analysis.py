@@ -6,6 +6,7 @@ sys.path.append("../fig1_1d2map/")
 from scipy import stats
 import itertools
 
+import raw_neural_data as raw
 from basic_analysis import tuning_curve_1d
 from dim_alignment import position_subspace, remapping_dim, cosine_sim, proj_aB
 import analysis_neuro as spk
@@ -18,19 +19,20 @@ def load_neural_data(data_folder, session_ID):
     session_ID : string
         mouse_session
     '''
+    path = f'{data_folder}{session_ID}/'
     d = {}
 
     # FR by 5cm position bins by trial for each cell
-    d['Y'] = np.load(f'{data_folder}{session_ID}_MEC_FRtensor.npy')
+    d['Y'] = np.load(f'{path}{session_ID}_MEC_FRtensor.npy')
 
     # spike count by observation for each cell
-    d['B'] = np.load(f'{data_folder}{session_ID}_MEC_spikes.npy')
+    d['B'] = np.load(f'{path}{session_ID}_MEC_spikes.npy')
 
     # behavioral variables by observation - position, speed, trial, time
-    d['A'] = np.load(f'{data_folder}{session_ID}_behavior.npy')
+    d['A'] = np.load(f'{path}{session_ID}_behavior.npy')
 
     # ID numbers for all good cells
-    d['cells'] = np.load(f'{data_folder}{session_ID}_MEC_cellIDs.npy')
+    d['cells'] = np.load(f'{path}{session_ID}_MEC_cellIDs.npy')
 
     return d
 
@@ -225,3 +227,123 @@ def align_remap_dims(data_folder, session_IDs, num_maps):
         all_angles.append(np.rad2deg(np.arccos(np.abs(angles))))
     
     return all_angles
+
+
+''' Waveforms '''
+def choose_epochs(data_folder, session_ID, n_maps, unstable_thresh=0.25):
+    '''
+    Define the epoch over which to extract waveforms for each session.
+    Find the longest block of stable trials for each map.
+    '''
+    # load the data and divide by map
+    d = load_neural_data(data_folder, session_ID)
+    d = format_neural_data(d, n_maps=n_maps,
+                                    filter_stability=False, unstable_thresh=0.25)
+    sp = raw.load_np_data(data_folder, session_ID)
+    d['sp'] = sp
+    
+    # data params
+    W = d['kmeans']['W'].copy() # k-means cluster labels by trial
+    sim = d['sim'].copy() # trial-trial similarity
+
+    # get the indices for unstable trials for each map
+    unstable_idx = []
+    for j in range(n_maps):
+        # extract the correlation matrix for this map
+        m_idx = W[:, j].astype(bool)
+        sim_map = sim[m_idx, :]
+        sim_map = sim_map[:, m_idx]
+
+        # compute the local stability for each trial
+        n_trials_map = sim_map.shape[0]
+        local_corr = np.zeros(n_trials_map)
+        for t in range(n_trials_map):
+            local_corr[t] = np.mean(sim_map[t])
+
+        # store for each map
+        unstable_idx.append(local_corr < unstable_thresh)
+
+    # find blocks of stable trials for each map
+    n_trials = W.shape[0]
+    all_trials = np.arange(n_trials)
+    epoch_trials = np.zeros((n_maps, 2))
+    for j in range(n_maps):
+        # find blocks of contiguous stable trials
+        u_idx = unstable_idx[j]
+        trials = all_trials[W[:, j].astype(bool)]
+        trials_adj = trials.copy()
+        trials_adj[u_idx] = trials_adj[u_idx] - 1000
+        switches = np.diff(trials_adj) > 1
+        block_starts = trials[np.insert(switches, 0, True)]
+        block_ends = trials[np.insert(switches, -1, True)]
+        
+        # use the first and last trial of the longest block
+        block_len = block_ends - block_starts    
+        epoch_trials[j, 0] = block_starts[np.argmax(block_len)]
+        epoch_trials[j, 1] = block_ends[np.argmax(block_len)] 
+
+    # get epochs in terms of samples
+    d['epoch_trials'] = epoch_trials
+    epoch_times = trials_to_samples(d)
+
+    return epoch_trials, epoch_times
+
+
+
+def samples_to_trials(d):
+    '''
+    Convert from epoch times (which are in samples) 
+    to the corresponding trial numbers
+    
+    Params:
+    -------
+    epochs : ndarray, shape (num_epochs, 2) 
+        sample numbers defining the start and end of each epoch
+    '''
+    # sampling params
+    epoch_times = d['epochs']
+    sample_rate = d['sp']['sample_rate']
+    
+    # data params
+    timepoints = d['A'][:, -1]
+    trials = d['A'][:, 2]
+    n_epochs = epoch_times.shape[0]
+    
+    # get the trials for each epoch start/stop
+    epoch_trials = np.zeros((n_epochs, 2))
+    for epoch_idx, (epoch_start, epoch_stop) in enumerate(epoch_times):
+        start_idx = np.argmin(np.abs(timepoints - epoch_start/sample_rate))
+        stop_idx = np.argmin(np.abs(timepoints - epoch_stop/sample_rate))    
+        epoch_trials[epoch_idx, 0] = trials[start_idx]
+        epoch_trials[epoch_idx, 1] = trials[stop_idx]
+    
+    return epoch_trials
+
+def trials_to_samples(d):
+    '''
+    Convert from epoch trials to epoch start/stop times
+    in terms of kilosort samples
+    
+    Params:
+    -------
+    epoch_trials : ndarray, shape (num_epochs, 2) 
+        trial numbers defining the start and end of each epoch
+    '''
+    # data params
+    epoch_trials = d['epoch_trials']
+    timepoints = d['A'][:, -1]
+    trials = d['A'][:, 2]
+    n_epochs = epoch_trials.shape[0]
+    
+    # sampling params
+    sample_rate = d['sp']['sample_rate']
+    
+    # get the sample number for each epoch start/stop
+    epoch_times = np.zeros((n_epochs, 2))
+    for epoch_idx, (epoch_start, epoch_stop) in enumerate(epoch_trials):
+        start_idx = np.argmin(np.abs(trials - epoch_start))
+        stop_idx = np.argmin(np.abs(trials - epoch_stop))    
+        epoch_times[epoch_idx, 0] = timepoints[start_idx] * sample_rate
+        epoch_times[epoch_idx, 1] = timepoints[stop_idx] * sample_rate
+    
+    return epoch_times

@@ -25,6 +25,9 @@ title_size = 10
 axis_label = 9
 tick_label = 7
 
+# session order for plotting
+session_order = np.asarray([1, 2, 0, 3])
+
 # map colors
 c1 = 'xkcd:scarlet'
 c2 = 'xkcd:green blue'
@@ -259,6 +262,9 @@ def plot_d(data_folder, session_IDs, num_maps):
         number of maps in each session
     '''
     # data params
+    sorted_sessions = []
+    for idx in session_order:
+        sorted_sessions.append(session_IDs[idx])
     n_sessions = len(session_IDs)
     n_maps = np.max(num_maps)
     n_pairs = (np.math.factorial(n_maps)) // \
@@ -269,7 +275,7 @@ def plot_d(data_folder, session_IDs, num_maps):
 
     alignment_scores = np.zeros((n_sessions, n_pairs))
     alignment_scores.fill(np.nan)
-    for i, s_id in enumerate(session_IDs):
+    for i, s_id in enumerate(sorted_sessions):
         # define the map pairs
         n_maps = num_maps[i]
         m_ids = np.arange(n_maps)
@@ -338,7 +344,7 @@ def plot_d(data_folder, session_IDs, num_maps):
     # labels
     ax.set_ylabel('misalignment', fontsize=axis_label, labelpad=1)
     ax.set_xlabel('session ID', fontsize=axis_label, labelpad=1)
-    # ax.set_xticklabels(session_IDs, rotation=90)
+    # ax.set_xticklabels(sorted_sessions, rotation=90)
     # ax.legend(loc='upper left', bbox_to_anchor=(1.2, 1.2))
 
     return f, ax
@@ -354,6 +360,9 @@ def plot_e(data_folder, session_IDs, num_maps):
     to be arccos(1/n). For 3 maps, this is 60 deg. For 4 maps, this is ~70.5 deg.
     '''
     # data params
+    sorted_sessions = []
+    for idx in session_order:
+        sorted_sessions.append(session_IDs[idx])
     n_sessions = len(session_IDs)
     n_maps = np.max(num_maps)
     dt = 0.02 # time bin
@@ -361,7 +370,7 @@ def plot_e(data_folder, session_IDs, num_maps):
     n_pos_bins = 400 // pos_bin
 
     # get the angles between remapping dims for all sessions
-    all_angles = align_remap_dims(data_folder, session_IDs, num_maps)
+    all_angles = align_remap_dims(data_folder, sorted_sessions, num_maps)
 
     # fig params 
     f, ax = plt.subplots(1, 1, figsize=(0.8, 1))
@@ -400,3 +409,44 @@ def plot_e(data_folder, session_IDs, num_maps):
     ax.set_xlabel('session ID', fontsize=axis_label, labelpad=1)
 
     return f, ax
+
+def plot_waveforms(d, cell_ID, epoch, ax, wf_color, \
+                    std_color=None, plot_std=True):
+    # data params
+    cell_channels = d['cell_channels']
+    waveform_avg = d['waveform_avg'].copy()
+    n_epochs, n_cells, n_channels, n_samples = waveform_avg.shape
+    waveform_std = d['waveform_std'].copy()
+    cells = d['cells']
+    cdx = np.where(cells==cell_ID)[0][0]
+
+    # fig params
+    if std_color == None:
+        std_color = wf_color
+    
+    # get channel params
+    best_channel = cell_channels[cdx]
+    window = np.arange(best_channel-6, best_channel+6)
+    sp = d['sp']
+    ycoords = sp['ycoords'][window-3].copy()
+    xcoords = sp['xcoords'][window-3].copy()
+    ycoords = ycoords/25
+    xcoords = xcoords*3
+    
+    # get waveform params and normalize by epoch 0
+    wf_avg = waveform_avg[epoch, cdx, window, :]
+    wf_std = waveform_std[epoch, cdx, window, :]
+    wf_std = wf_std / np.abs(np.min(waveform_avg[0, cdx, window, :]))
+    wf_avg = wf_avg / np.abs(np.min(waveform_avg[0, cdx, window, :]))
+
+    # plot it
+    for i, ch in enumerate(window):
+        wf_avg[i] = wf_avg[i] - wf_avg[i, 0] # align to channel center
+        x = xcoords[i]
+        y = ycoords[i]
+        x_samples = np.arange(x - n_samples//2, (x + n_samples//2)+1)
+        ax.plot(x_samples, wf_avg[i]+y, color=wf_color, lw=0.5, zorder=2)
+        if plot_std:
+            ax.fill_between(x_samples, (wf_avg[i]+y)-wf_std[i], (wf_avg[i]+y)+wf_std[i], 
+                            color=std_color, lw=0.1, alpha=0.2, zorder=1)
+    ax.axis('off')
