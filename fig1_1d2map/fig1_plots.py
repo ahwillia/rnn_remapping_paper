@@ -890,9 +890,53 @@ def plot_k(data_folder, model_IDs):
 
 
 ''' POSSIBLE SUPPLEMENTAL FIGS '''
+def performance_metrics(data_folder, model_IDs):
+    '''
+    Model performance on position and latent state estimation.
+
+    Computes the root mean-squared angular error on the final timestep and
+    the percent corrent latent state guesses for all models.
+    '''
+    # to store the output
+    n_models = len(model_IDs)
+    pos_error_deg = np.zeros(n_models)
+    pct_correct = np.zeros(n_models)
+
+    for i, m_id in enumerate(model_IDs):
+        # get the rnn data
+        inputs, outputs, targets = sample_rnn_data(data_folder, m_id)
+
+        # compare output and target position - angular error on the last step
+        pos_out = outputs['pos_outputs'].detach().numpy()[-1, :, :]
+        pos_out = np.arctan2(pos_out[:, 1], pos_out[:, 0])
+        pos_targ = targets["pos_targets"].detach().numpy()[-1, :, :]
+        pos_targ = np.squeeze((pos_targ + np.pi) % (2 * np.pi) - np.pi)
+        pos_error = np.arctan2(np.sin(pos_targ - pos_out), np.cos(pos_targ - pos_out))
+        pos_error_deg[i] = np.mean(np.abs(np.rad2deg(pos_error)))
+        
+        # compare output and target state - % incorrect guesses
+        map_logits = outputs["map_logits"].detach().numpy()
+        map_logits = softmax(map_logits, axis=1)
+        map_out = (map_logits[:, :, 0] < map_logits[:, :, 1]).astype(int)
+        map_targ = targets["map_targets"].detach().numpy()
+        n_obs = map_targ.shape[0] * map_targ.shape[1]
+        pct_correct[i] = (np.sum(map_out == map_targ) / n_obs) * 100
+
+    # get the summary stats
+    n_steps = map_targ.shape[0]
+    mean_pos_error = np.mean(pos_error_deg)
+    stdv_pos_error = stats.tstd(pos_error_deg)
+    mean_pct_correct = np.mean(pct_correct)
+    stdv_pct_correct = stats.tstd(pct_correct)
+
+    print(f'RMS angular error after {n_steps} steps (mean, stdv) = {mean_pos_error:.3}, {stdv_pos_error:.3}')
+    print(f'percent correct state estimates (mean, stdv) = {mean_pct_correct}, {stdv_pct_correct}')
+
+    return pos_error_deg, pct_correct
+
 def plot_supp_1(data_folder, model_IDs):
     '''
-    Final loss for position and context estimates across models
+    Final loss for position and latent state estimates across models
     (see task.py for the loss functions)
 
     Params
@@ -911,14 +955,12 @@ def plot_supp_1(data_folder, model_IDs):
         pos_losses = np.append(pos_losses, pos_loss[-1])
         map_loss = np.load(f"{data_folder}/{m_id}/map_losses.npy")
         map_losses = np.append(map_losses, map_loss[-1])
-    print(f'mean +/- standard error of the mean:')
-    print(f'position loss: {np.mean(pos_losses):.3} +/- {stats.sem(pos_losses):.3}')
-    print(f'context loss: {np.mean(map_losses):.3} +/- {stats.sem(map_losses):.3}')
+    print(f'mean +/- standard deviation:')
+    print(f'position loss: {np.mean(pos_losses):.3} +/- {stats.tstd(pos_losses):.3}')
+    print(f'context loss: {np.mean(map_losses):.3} +/- {stats.tstd(map_losses):.3}')
 
     # figure params
     f, ax = plt.subplots(1, 1, figsize=(0.5, 1))
-    pos_col = 'xkcd:cobalt blue'
-    c1 = 'xkcd:scarlet'
     DOT_SIZE = 10
     DOT_LW = 1
 

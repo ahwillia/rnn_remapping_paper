@@ -201,7 +201,7 @@ def plot_c(firing_rates, binned_pos,
     # fig params
     fig = plt.figure(figsize=(1.5, 1))
     ax = plt.axes([0, 0, .6, 1.2], projection='3d')
-    DOT_SIZE = 15
+    DOT_SIZE = 10
     PC_LW = 2
     SHADOW_LW = 3
 
@@ -209,11 +209,13 @@ def plot_c(firing_rates, binned_pos,
     ax.scatter(
         x_[:n_pos_bins], y_[:n_pos_bins], z_[:n_pos_bins],
         c=binned_pos, cmap=ring_colormap(),
-        alpha=1, lw=0, s=DOT_SIZE)
+        edgecolors='k', alpha=1,
+        lw=0, s=DOT_SIZE)
     ax.scatter(
         x_[n_pos_bins:], y_[n_pos_bins:], z_[n_pos_bins:],
         c=binned_pos, cmap=ring_colormap(),
-        alpha=1, lw=0, s=DOT_SIZE)
+        edgecolors='k', alpha=1,
+        lw=0, s=DOT_SIZE)
 
     # plot shadow
     ax.plot(
