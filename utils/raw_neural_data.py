@@ -24,7 +24,7 @@ def load_np_data(data_folder, session_ID):
     if 'data' in d: # struct is from silicon probe data
         data = d['data']
         sp = data['sp']
-        print(sp.keys())
+        # print(sp.keys())
     else:
         print('could not recognize data format!')
 
