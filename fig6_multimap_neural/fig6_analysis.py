@@ -5,6 +5,7 @@ sys.path.append("../fig1_1d2map/")
 
 from scipy import stats
 import itertools
+from scipy.spatial.distance import pdist
 
 import raw_neural_data as raw
 from basic_analysis import tuning_curve_1d
@@ -34,7 +35,17 @@ def load_neural_data(data_folder, session_ID):
     # ID numbers for all good cells
     d['cells'] = np.load(f'{path}{session_ID}_MEC_cellIDs.npy')
 
+    # Neuropixels data file
+    d['sp'] = raw.load_np_data(data_folder, session_ID)
+    
+    # spike waveforms from select epochs of trials
+    d['waveform_avg'] = np.load(f'{path}{session_ID}_mean_waveforms.npy')
+    d['waveform_std'] = np.load(f'{path}{session_ID}_stddev_waveforms.npy')
+    d['epochs'] = np.load(f'{path}{session_ID}_epochs.npy') # in samples
+    d['epoch_trials'] = samples_to_trials(d) # in trials
+
     return d
+
 
 def format_neural_data(d, n_maps=3,\
                         filter_stability=True,\
@@ -89,6 +100,7 @@ def filter_by_stability(d, unstable_thresh=0.25):
     B = d['B'].copy() # spikes
     Y = d['Y'].copy() # firing rates
     cells = d['cells'].copy() # cell IDs
+    epoch_trials = d['epoch_trials'].copy() # trials IDs defining waveform epochs
     sim = d['sim'].copy() # trial-trial similarity
     W = d['kmeans']['W'].copy() # k-means cluster labels by trial
     W = W.astype(bool)
@@ -138,10 +150,23 @@ def filter_by_stability(d, unstable_thresh=0.25):
                     W_filt[t, j] = False
 
     # to store new data
-    d_filt = {}
+    d_filt = d.copy()
     d_filt['cells'] = cells
     d_filt['kmeans'] = {}
 
+    # filter trial-based data
+    trial_idx = np.sum(W_filt, axis=1).astype(bool)
+    d_filt['Y'] = Y[trial_idx]
+    d_filt['kmeans']['W'] = W[trial_idx]
+
+    # filter epochs
+    trial_nums = np.unique(trials)
+    unstable_trials = trial_nums[(trial_idx - 1).astype(bool)]
+    for t_start, t_stop in epoch_trials:
+        while t_start in unstable_trials:
+            t_start += 1
+        while t_stop in unstable_trials:
+            t_stop -= 1
 
     # filter observation-based data
     A_new = A[~unstable_obs_idx]
@@ -154,13 +179,10 @@ def filter_by_stability(d, unstable_thresh=0.25):
     new_trials = np.zeros(n_obs)
     for i, t in enumerate(np.unique(trials)):
         new_trials[trials==t] = i
+        if t in epoch_trials:
+            epoch_trials[epoch_trials==t] = i
     A_new[:, 2] = new_trials
     d_filt['A'] = A_new
-
-    # filter trial-based data
-    trial_idx = np.sum(W_filt, axis=1).astype(bool)
-    d_filt['Y'] = Y[trial_idx]
-    d_filt['kmeans']['W'] = W[trial_idx]
 
     return d_filt
 
@@ -347,3 +369,79 @@ def trials_to_samples(d):
         epoch_times[epoch_idx, 1] = timepoints[stop_idx] * sample_rate
     
     return epoch_times
+
+
+def get_cell_channels(d):
+    '''
+    Uses each cell's recorded depth to find the 
+    nearest probe channel to that cell
+
+    Returns
+    -------
+    cell_channels : ndarray, shape (n_cells,)
+        array of ints corresponding to the channel nearest to each cell
+    '''
+    # load relevant data
+    cells = d['cells']
+    sp = d['sp']
+    depth_unsorted = sp['spike_depth'].copy()
+
+    # get the indices for all "good" cells
+    cgs = sp['cgs'].copy()
+    cids = sp['cids'].copy()
+    good_cells = cids[cgs == 2]
+
+    # get depth for each MEC cell
+    depth = np.zeros(cells.shape[0])
+    for i, c in enumerate(cells):
+        depth[i] = depth_unsorted[good_cells==c]
+
+    # get nearest channel to each cell
+    channel_depths = sp['ycoords'].copy()
+    channels = np.zeros(cells.shape[0])
+    for i, y in enumerate(depth):
+        channels[i] = 3 + np.argmin(np.abs(channel_depths - y))
+    
+    return channels.astype(int)
+
+
+def wf_correlations(d):
+    '''
+    Finds the Pearson correlation between the average waveforms
+    from each map for all cells.
+
+    Uses the 20 channels nearest to each cell.
+    '''
+    # load relevant data
+    waveform_avg = d['waveform_avg'].copy()
+    waveform_std = d['waveform_std'].copy()
+    cell_channels = d['cell_channels'].copy()
+    n_epochs, n_cells, n_channels, n_samples = waveform_avg.shape
+
+    wf_avg = np.zeros((n_epochs, n_cells, 20, n_samples))
+    for i, ch in enumerate(cell_channels):
+        if ch < 10:
+            wf_avg[:, i, :, :] = waveform_avg[:, i, :20, :]
+        elif ch > 375:
+            wf_avg[:, i, :, :] = waveform_avg[:, i, 365:, :]
+        else:
+            wf_avg[:, i, :, :] = waveform_avg[:, i, ch-10:ch+10, :]
+
+    # compute correlation for flattened vectors
+    avg_corr = np.zeros(n_cells)
+    flat_wf_avg = np.reshape(wf_avg, (n_epochs, n_cells, -1))
+    avg_corr = np.full(n_cells, np.nan)
+    for c in range(n_cells):
+        cell_wf_avg = flat_wf_avg[:, c, :]
+        corr_vec = np.abs(pdist(cell_wf_avg, 'correlation')-1)
+        avg_corr[c] = np.nanmean(corr_vec)
+
+    # get quartiles and median
+    pct_5 = np.percentile(avg_corr, 5)
+    pct_95 = np.percentile(avg_corr, 95)
+    med_corr = np.median(avg_corr)
+
+    # print the results
+    print(f'across all cells: median waveform correlation = {med_corr:.4}, 5th percentile = {pct_5:.4}')
+
+    return avg_corr

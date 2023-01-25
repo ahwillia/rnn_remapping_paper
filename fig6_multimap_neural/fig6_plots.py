@@ -11,7 +11,7 @@ from model_utils import sample_rnn_data, format_rnn_data
 from basic_analysis import tuning_curve_1d, compute_misalignment
 
 from analysis_neuro import tuning_curve
-from fig6_analysis import load_neural_data, format_neural_data, align_remap_dims
+import fig6_analysis as analysis
 
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
@@ -42,8 +42,9 @@ all_session_colors = [c3, c1, c2, c4]
 def plot_b(d, cell_ID, all_FR, all_FR_sem, binned_pos):
     '''
     Example of remapping for a 3-map session:
-    raster and TC for one unit
     network-wide similarity and distance to cluster
+    raster and TC for one unit
+    waveform overlay for that unit
 
     Params:
     ------
@@ -63,9 +64,15 @@ def plot_b(d, cell_ID, all_FR, all_FR_sem, binned_pos):
     A = d['A'] # behavior
     B = d['B'] # spikes
     cells = d['cells'] # cell IDs
+    waveform_avg = d['waveform_avg'] # average waveforms selected from each map
+    waveform_std = d['waveform_std'] # corresponding standard dev.
     sim = d['sim'] # trial-trial similarity
     remap_idx = d['remap_idx'] # remap trial index
     W = d['kmeans']['W']
+
+    # get the correlation across epochs for each cell's 20 best channels
+    d['cell_channels'] = analysis.get_cell_channels(d)
+    avg_corr = analysis.wf_correlations(d)
 
     # data params
     n_maps = W.shape[1]
@@ -75,16 +82,16 @@ def plot_b(d, cell_ID, all_FR, all_FR_sem, binned_pos):
     map1_idx = d['idx'][1, :]
 
     # figure parameters
-    gs = gridspec.GridSpec(8, 8, hspace=1.2, wspace=4)
-    f = plt.figure(figsize=(2, 1.2)) 
+    gs = gridspec.GridSpec(8, 12, hspace=1.2, wspace=4)
+    f = plt.figure(figsize=(3, 1.2)) 
     PT_SIZE = 0.5   
     LW_MEAN = 0.5
     LW_SEM = 0.1   
     CLU_W = 4 
 
     # plot raster and tuning curves colored by map
-    ax2 = plt.subplot(gs[:-2, -3:]) # raster
-    ax3 = plt.subplot(gs[-2:, -3:]) # tuning curves
+    ax2 = plt.subplot(gs[:-2, 5:-4]) # raster
+    ax3 = plt.subplot(gs[-2:, 5:-4]) # tuning curves
     for j in range(n_maps):
         # raster
         map_idx = d['idx'][j, :].copy()
@@ -125,8 +132,15 @@ def plot_b(d, cell_ID, all_FR, all_FR_sem, binned_pos):
     ax3.set_ylabel('FR', fontsize=axis_label, labelpad=0.2)
     ax3.set_xlabel('pos. (cm)', fontsize=axis_label, labelpad=1)
 
+    # plot waveform overlay colored by map
+    ax4 = plt.subplot(gs[:, -3:])
+    for j in range(n_maps):
+        plot_waveforms(d, cell_ID, j, ax4, \
+                        all_map_colors[j])
+    ax4.set_title('waveform\noverlay', fontsize=title_size, pad=3)
+
     # plot similarity matrix
-    ax1 = plt.subplot(gs[:-2, :-4])
+    ax1 = plt.subplot(gs[:-2, :4])
     im = ax1.imshow(sim, clim=[0, 1], aspect='auto', cmap='gist_yarg')
     ax1.set_title("network\nsimilarity", fontsize=title_size, pad=3)
     ax1.tick_params(which='major', labelsize=tick_label, pad=0.5)
@@ -136,7 +150,7 @@ def plot_b(d, cell_ID, all_FR, all_FR_sem, binned_pos):
     ax1.set_xlabel("map", fontsize=axis_label, labelpad=6)
 
     # plot cluster assignments
-    ax0 = plt.subplot(gs[-1, :-4])
+    ax0 = plt.subplot(gs[-1, :4])
     start_idx = np.append([0], remap_idx)
     end_idx = np.append(remap_idx, W.shape[0])
     map_colors = []
@@ -284,8 +298,8 @@ def plot_d(data_folder, session_IDs, num_maps):
         m_pairs = list(itertools.combinations(m_ids,2))
 
         # load + format the data
-        d = load_neural_data(data_folder, s_id)
-        d = format_neural_data(d, n_maps=n_maps)
+        d = analysis.load_neural_data(data_folder, s_id)
+        d = analysis.format_neural_data(d, n_maps=n_maps)
         
         # compute firing rates for each map
         A = d['A']
@@ -372,7 +386,7 @@ def plot_e(data_folder, session_IDs, num_maps):
     n_pos_bins = 400 // pos_bin
 
     # get the angles between remapping dims for all sessions
-    all_angles = align_remap_dims(data_folder, sorted_sessions, num_maps)
+    all_angles = analysis.align_remap_dims(data_folder, sorted_sessions, num_maps)
 
     # fig params 
     f, ax = plt.subplots(1, 1, figsize=(0.8, 1))
@@ -413,7 +427,8 @@ def plot_e(data_folder, session_IDs, num_maps):
     return f, ax
 
 def plot_waveforms(d, cell_ID, epoch, ax, wf_color, \
-                    std_color=None, plot_std=True):
+                    std_color=None, plot_std=False, \
+                    avg_corr=None, show_text=False):
     # data params
     cell_channels = d['cell_channels']
     waveform_avg = d['waveform_avg'].copy()
@@ -451,4 +466,13 @@ def plot_waveforms(d, cell_ID, epoch, ax, wf_color, \
         if plot_std:
             ax.fill_between(x_samples, (wf_avg[i]+y)-wf_std[i], (wf_avg[i]+y)+wf_std[i], 
                             color=std_color, lw=0.1, alpha=0.2, zorder=1)
+
+    # add correlation info
+    if show_text:
+        xlims = ax.get_xlim()
+        ylims = ax.get_ylim()
+        ax.text(xlims[0], ylims[0]-1, \
+                f'{avg_corr[cdx]:.3}', \
+                fontsize=tick_label)
+
     ax.axis('off')

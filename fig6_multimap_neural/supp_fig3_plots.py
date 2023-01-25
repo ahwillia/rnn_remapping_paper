@@ -9,9 +9,10 @@ from mpl_toolkits.mplot3d import Axes3D
 from plot_utils import simple_cmap, ring_colormap
 from model_utils import sample_rnn_data, format_rnn_data
 from basic_analysis import tuning_curve_1d, compute_misalignment
+from fig6_plots import plot_waveforms
 
 from analysis_neuro import tuning_curve
-from fig6_analysis import load_neural_data, format_neural_data, align_remap_dims
+from fig6_analysis import get_cell_channels, wf_correlations
 
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
@@ -32,12 +33,9 @@ c3 = 'k'
 c4 = 'xkcd:saffron'
 all_map_colors = [c2, c1, c3, c4]
 
-# session colors
-all_session_colors = [c3, c1, c2, c4]
-
 def plot_a(d, cell_ID, all_FR, all_FR_sem, binned_pos):
     '''
-    Example of remapping for a 3-map session:
+    Example session showing remapping:
     raster and TC for one unit
     network-wide similarity and distance to cluster
 
@@ -45,8 +43,8 @@ def plot_a(d, cell_ID, all_FR, all_FR_sem, binned_pos):
     ------
     d : dict
         data for the example mouse/session
-    cell_ID : int
-        ID number for the example cell.
+    cell_ID : array of ints
+        ID numbers for the example cells.
     all_FR : ndarray, shape (n_maps, n_pos_bins, n_cells)
         firing rate by position within each map    
     all_FR_sem : ndarray, shape (n_maps, n_pos_bins, n_cells)
@@ -160,5 +158,78 @@ def plot_a(d, cell_ID, all_FR, all_FR_sem, binned_pos):
     ax0.set_xlim([0, W.shape[0]])
     plt.axis('off')    
     ax0.tick_params(which='major', labelsize=tick_label, pad=0.5)
+
+    return f, gs
+
+def plot_b(d, cell_ID, session_idx=1):
+    # data params
+    d['cell_channels'] = get_cell_channels(d)
+    n_maps, n_cells, _, _ = d['waveform_avg'].shape
+
+    # get the waveform correlations, median, and percetiles
+    avg_corr = wf_correlations(d)
+    pct_5 = np.percentile(avg_corr, 5)
+    pct_95 = np.percentile(avg_corr, 95)
+    med_corr = np.median(avg_corr)
+
+    # figure parameters
+    gs = gridspec.GridSpec(8, 14, hspace=1.2, wspace=4)
+    f = plt.figure(figsize=(3.8, 1.2)) 
+    PT_SIZE = 0.4   
+    LW_MEAN = 0.5
+    LW_SEM = 0.1   
+    CLU_W = 4 
+    DOT_LW = 0.5
+    DOT_SIZE = 5
+    BAR_SIZE = 4
+    BAR_WIDTH = 0.8
+    LW_PCT = 0.6
+    JIT = np.random.randn(n_cells) * 0.05 # jitter points
+    
+    # plot the average waveform correlation across epochs for all cells
+    ax = plt.subplot(gs[:, 1:4])
+    ax.scatter(np.full(n_cells, 1)+JIT, avg_corr,\
+               facecolors='none',\
+               edgecolors=all_map_colors[1],\
+               s=DOT_SIZE, lw=DOT_LW, alpha=1, zorder=1)
+        
+    # plot the median and 5/95th percentiles
+    ax.plot(1, med_corr, '_k',\
+            markersize=BAR_SIZE,\
+            markeredgewidth=BAR_WIDTH,\
+            zorder=2, alpha=1)
+    ax.vlines(1, pct_5, pct_95, lw=LW_PCT,\
+                colors='k', linestyles='solid',\
+                zorder=2, alpha=1)
+        
+    # ticks and lims
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['left'].set_bounds(0.4, 1)
+    ax.spines['bottom'].set_visible(False)
+    ax.set_xlim([-0.1, 2.1])
+    ax.set_ylim([0.3, 1.2])
+    ax.set_xticks([])
+    ax.set_yticks(np.arange(0.4, 1.1, 0.2))
+    ax.tick_params(which='major', labelsize=tick_label, pad=0.5)
+    ax.set_title('correlations\nall cells', fontsize=title_size, pad=3)
+
+    # plot waveform overlay colored by map for each cell
+    col_start = 5
+    for i, c in enumerate(cell_ID):
+        col_end = col_start + 3
+        ax2 = plt.subplot(gs[:, col_start:col_end])
+        for j in range(n_maps):
+            plot_waveforms(d, c, j, ax2, \
+                            all_map_colors[j])
+        # plot black on top
+        plot_waveforms(d, c, 2, ax2, \
+                            all_map_colors[2])
+
+        if i==1:
+            ax2.set_title(f'waveform overlays\ncell {i+1}', fontsize=title_size, pad=3)
+        else:
+            ax2.set_title(f'cell {i+1}', fontsize=title_size, pad=3)
+        col_start = col_end
 
     return f, gs

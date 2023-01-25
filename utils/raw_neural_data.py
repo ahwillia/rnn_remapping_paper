@@ -40,7 +40,7 @@ def loadmat_sbx(filename):
     from mat files. It calls the function check keys to cure all entries
     which are still mat-objects
     """
-    print(filename)
+    # print(filename)
     data_ = scipy.io.loadmat(filename, struct_as_record=False, squeeze_me=True)
     return _check_keys(data_)
 
