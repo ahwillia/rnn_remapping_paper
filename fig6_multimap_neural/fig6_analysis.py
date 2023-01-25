@@ -263,17 +263,17 @@ def choose_epochs(data_folder, session_ID, n_maps, unstable_thresh=0.25):
         # store for each map
         unstable_idx.append(local_corr < unstable_thresh)
 
-    # find blocks of stable trials for each map
+    # find blocks of trials for each map
     n_trials = W.shape[0]
     all_trials = np.arange(n_trials)
     epoch_trials = np.zeros((n_maps, 2))
     for j in range(n_maps):
-        # find blocks of contiguous stable trials
-        u_idx = unstable_idx[j]
+        # find blocks of contiguous trials
+        # u_idx = unstable_idx[j]
         trials = all_trials[W[:, j].astype(bool)]
-        trials_adj = trials.copy()
-        trials_adj[u_idx] = trials_adj[u_idx] * -100
-        switches = np.diff(trials_adj) > 1
+        # trials_adj = trials.copy()
+        # trials_adj[u_idx] = trials_adj[u_idx] * -100
+        switches = np.diff(trials) > 1
         block_starts = trials[np.insert(switches, 0, True)]
         block_ends = trials[np.insert(switches, -1, True)]
         
