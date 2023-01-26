@@ -423,3 +423,31 @@ def align_in_out(data_folder, model_IDs):
             pos_dim_angles[label][i] = np.abs(proj_aB(w, pos_subspace))
 
     return remap_dim_angles, pos_dim_angles
+
+
+''' characterize single unit remapping properties '''
+def pct_change_FR(avg_FR_1, avg_FR_2):
+    ''' find the absolute percent difference in firing rates '''
+    peak_FR_1 = np.max(avg_FR_1, axis=0)
+    peak_FR_2 = np.max(avg_FR_2, axis=0)
+    return (np.abs(peak_FR_2 - peak_FR_1) / ((peak_FR_2 + peak_FR_1)/2))*100
+
+def spatial_dissimilarity(avg_FR_1, avg_FR_2):
+    '''
+    find how dissimilar 2 sets of firing rates are
+    dissimilarity = 1 - cosine similarity
+    '''
+    n_units = avg_FR_1.shape[1]
+    
+    # calculate cosine similarity
+    norms_1 = np.linalg.norm(avg_FR_1, axis=0)
+    norms_2 = np.linalg.norm(avg_FR_2, axis=0)
+    angle = np.zeros(n_units)
+    for i, n1 in enumerate(norms_1):
+        n2 = norms_2[i]
+        normalized_FR_1 = avg_FR_1[:, i]/n1
+        normalized_FR_2 = avg_FR_2[:, i]/n2   
+        angle[i] = normalized_FR_1 @ normalized_FR_2
+        
+    # return dissimilarity
+    return 1 - angle
