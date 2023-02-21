@@ -45,11 +45,11 @@ class RemapManualRNN(nn.Module):
         """
         Args:
           inp_init : n_batch x 2
-          inp_vel : n_steps x n_batch x 1
+          inp_vel : n_steps x n_batch x num_spatial_dimensions
           inp_remaps : n_steps x n_batch x num_maps
 
         Returns:
-          pos_outputs : n_steps x n_batch x 2
+          pos_outputs : n_steps x n_batch x num_spatial_dimensions
           map_logits : n_steps x n_batch x num_maps
         """
 
@@ -63,7 +63,6 @@ class RemapManualRNN(nn.Module):
         inputs = torch.cat((inp_vel, inp_remaps), axis=-1)
 
         # RNN outputs.
-        # pos_outputs = torch.empty((inputs.shape[0], inputs.shape[1], 2))
         pos_outputs = torch.empty((inputs.shape[0], inputs.shape[1], 2 * self.num_spatial_dimensions))
         map_outputs = torch.empty((inputs.shape[0], inputs.shape[1], self.num_maps))
 
