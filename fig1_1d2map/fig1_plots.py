@@ -23,8 +23,8 @@ axis_label = 9
 tick_label = 7
 
 # map colors
-c1 = 'xkcd:scarlet'
-c2 = 'k'
+c1 = 'k'
+c2 = 'xkcd:scarlet'
 
 # rnn position input/output colors
 pos_col = 'xkcd:cobalt blue'
@@ -64,14 +64,17 @@ def plot_c(d, cell_ID, FR_0, FR_1, FR_0_sem, FR_1_sem, binned_pos):
     map1_idx = d['idx'][1, :]
 
     # figure parameters
-    gs = gridspec.GridSpec(8, 7, hspace=1.2, wspace=4)
-    f = plt.figure(figsize=(1.6, 1))    
+    f, ax = plt.subplots(3, 2,
+                         figsize=(1.5, 1.2),
+                         gridspec_kw=dict(height_ratios=[7, 2, 1],
+                                          width_ratios=[3, 4],
+                                          hspace=0.2, wspace=0.2))    
     LW_MEAN = 0.5
     LW_SEM = 0.1   
     CLU_W = 4 
 
     # plot raster
-    ax2 = plt.subplot(gs[:-2, :3])
+    ax2 = ax[0, 0]
     sdx_0 = B[map0_idx, np.where(cells==cell_ID)[0][0]].astype(bool)
     ax2.scatter(A[map0_idx, 0][sdx_0], A[map0_idx, 2][sdx_0],\
                 color=c2, lw=0, s=0.3, alpha=.3)
@@ -89,7 +92,7 @@ def plot_c(d, cell_ID, FR_0, FR_1, FR_0_sem, FR_1_sem, binned_pos):
 
     # plot tuning curves with SEM
     sdx = (np.where(cells==cell_ID)[0][0]).astype(int)
-    ax3 = plt.subplot(gs[-2:, :3])
+    ax3 = ax[1, 0]
     ax3.plot(FR_0[:, sdx], c2, lw=LW_MEAN, alpha=0.9)
     ax3.fill_between(binned_pos/2,\
                         FR_0[:, sdx] + FR_0_sem[:, sdx],\
@@ -107,26 +110,26 @@ def plot_c(d, cell_ID, FR_0, FR_1, FR_0_sem, FR_1_sem, binned_pos):
     ax3.spines['left'].set_bounds(0, 12)
     ax3.spines['bottom'].set_bounds(0, 200)
     ax3.set_xticks([0, 100, 200])
-    ax3.set_xticklabels([0, 200, 400])
+    ax3.set_xticklabels([0, 2, 4])
     ax3.set_yticks([0, 12])
     ax3.set_ylim([0, 15])
     ax3.set_xlim([0, 200])
     ax3.set_ylabel('FR', fontsize=axis_label, labelpad=6)
-    ax3.set_xlabel('pos. (cm)', fontsize=axis_label, labelpad=1)
+    ax3.set_xlabel('pos. (m)', fontsize=axis_label, labelpad=1)
     ax3.tick_params(which='major', labelsize=tick_label, pad=0.5)
 
     # plot similarity matrix
-    ax1 = plt.subplot(gs[:-2, 3:])
+    ax1 = ax[0, 1]
     im = ax1.imshow(sim, clim=[0, 1], aspect='auto', cmap='gist_yarg')
     ax1.set_title("network", fontsize=title_size, pad=3)
     ax1.tick_params(labelleft=False, which='major', 
                     labelsize=tick_label, pad=0.5)
     ax1.set_yticks([0, 200, 400])
     ax1.set_xticks([0, 200, 400])
-    ax1.set_xlabel("map", fontsize=axis_label, labelpad=5)
+    ax1.set_xlabel("trial", fontsize=axis_label, labelpad=1)
 
     # plot cluster assignments
-    ax0 = plt.subplot(gs[-1, 3:])
+    ax0 = ax[2, 1]
 
     all_map_colors = [c2, c1]
     start_idx = np.append([0], remap_idx)
@@ -139,12 +142,16 @@ def plot_c(d, cell_ID, FR_0, FR_1, FR_0_sem, FR_1_sem, binned_pos):
     ax0.hlines(np.full(start_idx.shape[0], 1), start_idx, end_idx, 
                 colors=map_colors, lw=np.full(start_idx.shape[0], CLU_W), 
                 linestyles=np.full(start_idx.shape[0], 'solid'))
-    ax0.set_ylim([0.5, 1.5])
+    ax0.set_ylim([0.5, 2])
     ax0.set_xlim([0, W.shape[0]])
     plt.axis('off')    
     ax0.tick_params(which='major', labelsize=tick_label, pad=0.5)
 
-    return f, gs
+    # hide unused subplots
+    ax[2, 0].axis('off')
+    ax[1, -1].axis('off')
+
+    return f, ax
 
 
 def plot_d(firing_rates, binned_pos,
@@ -427,11 +434,11 @@ def plot_g(data_folder, model_ID):
 
     # figure params
     width_ratios = np.append(np.full(n_ex_units, 3), 4)
-    f, ax = plt.subplots(2, n_ex_units + 1,
-                         figsize=(0.85*n_ex_units, 1),
-                         gridspec_kw=dict(height_ratios=[3.5, 1],
+    f, ax = plt.subplots(3, n_ex_units + 1,
+                         figsize=(0.85*n_ex_units, 1.2),
+                         gridspec_kw=dict(height_ratios=[7, 2, 1],
                                           width_ratios=width_ratios,
-                                          hspace=0.15, wspace=0.2))   
+                                          hspace=0.2, wspace=0.2))   
     DOT_SIZE = 0.3
     LW_MEAN = 0.5
     LW_SEM = 0.1   
@@ -490,6 +497,9 @@ def plot_g(data_folder, model_ID):
             ax0.set_title('example RNN units', fontsize=title_size, pad=3)
             ax1.set_xlabel('track position (rad.)', fontsize=axis_label, labelpad=1)
 
+        # hide unused subplots
+        ax[2, i].axis('off')
+
     # plot similarity matrix
     ax2 = ax[0, -1]
     im = ax2.imshow(network_similarity, \
@@ -501,17 +511,21 @@ def plot_g(data_folder, model_ID):
                     labelsize=tick_label, pad=0.5)
     ax2.set_yticks([0, np.round(n_traversals/2, -2), np.round(n_traversals, -2)])
     ax2.set_xticks([0, np.round(n_traversals/2, -2), np.round(n_traversals, -2)])
-    ax2.set_xlabel("map", fontsize=axis_label, labelpad=5)
+    ax2.set_xlabel("trial", fontsize=axis_label, labelpad=1)
 
     # plot map labels (by trial)
-    ax3 = ax[1, -1]
-    ax3.hlines(np.full(start_idx.shape[0], 0.7), start_idx, end_idx, 
+    ax3 = ax[2, -1]
+    ax3.hlines(np.full(start_idx.shape[0], 1), start_idx, end_idx, 
                 colors=map_colors, lw=np.full(start_idx.shape[0], CLU_W), 
                 linestyles=np.full(start_idx.shape[0], 'solid'))
-    ax3.set_ylim([0.5, 1.5])
+    ax3.set_ylim([0.5, 2])
     ax3.set_xlim([0, n_traversals])
-    plt.axis('off')    
+    ax3.axis('off')    
     ax3.tick_params(which='major', labelsize=tick_label, pad=0.5)
+    ax3.set_xticklabels([])
+
+    # hide unused subplots
+    ax[1, -1].axis('off')
 
     return f, ax
 
