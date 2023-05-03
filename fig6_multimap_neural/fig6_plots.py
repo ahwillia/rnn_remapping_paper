@@ -90,8 +90,8 @@ def plot_b(d, cell_ID, all_FR, all_FR_sem, binned_pos):
     CLU_W = 4 
 
     # plot raster and tuning curves colored by map
-    ax2 = plt.subplot(gs[:-2, 5:-4]) # raster
     ax3 = plt.subplot(gs[-2:, 5:-4]) # tuning curves
+    ax2 = plt.subplot(gs[:-2, 5:-4]) # raster
     for j in range(n_maps):
         # raster
         map_idx = d['idx'][j, :].copy()
@@ -123,17 +123,17 @@ def plot_b(d, cell_ID, all_FR, all_FR_sem, binned_pos):
     ax2.set_yticks([0, trial_max//2, trial_max])
     ax2.set_xticks([0, 200, 400])
     ax3.set_xticks([0, 100, 200])
-    ax3.set_xticklabels([0, 200, 400])
+    ax3.set_xticklabels([0, 2, 4])
     ax3.set_yticks([0, 20])
     ax2.tick_params(labelbottom=False, \
                     which='major', labelsize=tick_label, pad=0.5)
     ax3.tick_params(which='major', labelsize=tick_label, pad=0.5)
-    ax2.set_title('example\ncell', fontsize=title_size, pad=3)    
+    ax2.set_title('ex.\ncell', fontsize=title_size, pad=3)    
     ax3.set_ylabel('FR', fontsize=axis_label, labelpad=0.2)
-    ax3.set_xlabel('pos. (cm)', fontsize=axis_label, labelpad=1)
+    ax3.set_xlabel('pos. (m)', fontsize=axis_label, labelpad=1)
 
     # plot waveform overlay colored by map
-    ax4 = plt.subplot(gs[:, -3:])
+    ax4 = plt.subplot(gs[:, -4:-1])
     for j in range(n_maps):
         plot_waveforms(d, cell_ID, j, ax4, \
                         all_map_colors[j])
