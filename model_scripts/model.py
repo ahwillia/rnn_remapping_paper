@@ -69,7 +69,7 @@ class RemapManualRNN(nn.Module):
         # RNN hidden states, (n_steps, n_batch, hidden_size).
         hidden_states = torch.empty((inputs.shape[0], inputs.shape[1], state.shape[1]))
 
-        # This for loop is sub-optimal, but who care.
+        # This for loop is sub-optimal, but gets the job done.
         for t, inp in enumerate(inputs):
             state = self._f(self.linear_hh(state) + self.linear_ih(inp))
             pos_outputs[t] = self.readout_layer_pos(state)
