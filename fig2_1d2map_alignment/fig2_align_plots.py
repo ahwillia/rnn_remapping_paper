@@ -76,7 +76,7 @@ def plot_c(data_folder, model_IDs):
     return f, ax
 
 
-def plot_d(data_folder, model_ID):
+def plot_d_e(data_folder, model_ID):
     '''
     Plots showing the dimensionality of the remap vectors
     for an example model
