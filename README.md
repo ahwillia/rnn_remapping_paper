@@ -1,5 +1,5 @@
 # rnn_remapping_paper
-Code associated with Low et al., 2023 (*eLife* and *[biorXiv](https://www.biorxiv.org/content/10.1101/2023.01.25.525596v3)*): **Remapping in a recurrent neural network model of navigation and context inference**.
+Code associated with Low et al., 2023 (*[eLife](https://elifesciences.org/articles/86943)* and *[biorXiv](https://www.biorxiv.org/content/10.1101/2023.01.25.525596v3)*): **Remapping in a recurrent neural network model of navigation and context inference**.
 
 To train your own RNN models, use the scripts found in the `model_scripts` folder.
 
