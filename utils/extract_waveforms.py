@@ -2,12 +2,11 @@ import os
 import warnings
 import numpy as np
 import logging
-# logging.basicConfig(
-#     level=logging.INFO
-#     format='%(asctime)s.%(msecs)03d %(levelname)s %(module)s - %(funcName)s: %(message)s',
-# )
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s.%(msecs)03d %(levelname)s %(module)s - %(funcName)s: %(message)s',
+)
 
-# ROOTPATH = "/oak/stanford/groups/giocomo/export/data/Projects/RandomForage_NPandH3/ProcessedData"
 
 def list_sessions(data_folder):
 
@@ -24,15 +23,14 @@ def list_sessions(data_folder):
     return sorted(sessions)
 
 def run_session(data_folder, session_index):
-
     # Determine path to session.
     datapath = list_sessions(data_folder)[session_index]
 
     # Determine session ID.
     session_id = os.path.split(datapath)[-1]
-    session_id = session_id[:-2]
+    session_id = session_id[:-3]
 
-    logging.info(f"SESSION INDEX : {session_index}")
+    logging.info(f"SESSIONS: {list_sessions(data_folder)}")
     logging.info(f"SESSION NAME  : {session_id}")
     logging.info(f"DATAPATH      : {datapath}")
 
@@ -45,7 +43,11 @@ def run_session(data_folder, session_index):
 
     # Load epochs and cell ids
     cellids_file = os.path.join(datapath, grab_files(datapath, "MEC_cellIDs.npy"))
-    epochs_file = os.path.join(datapath, grab_files(datapath, "epochs.npy"))
+    # epochs_file = os.path.join(datapath, "epochs.npy")
+    epochs_file = os.path.join(
+        "/mnt/home/awilliams/code/rnn_remapping_paper/data/subset_neural_data",
+        f"{session_id}_1_epochs.npy"
+    )
 
     # Compute mean and stddev of waveforms in each epoch.
     mn, sd, cnts = extract_waveforms(
@@ -55,9 +57,9 @@ def run_session(data_folder, session_index):
     )
 
     # Save results
-    np.save(os.path.join(datapath, "mean_waveforms.npy"), mn)
-    np.save(os.path.join(datapath, "stddev_waveforms.npy"), sd)
-    np.save(os.path.join(datapath, "spike_counts.npy"), cnts)
+    np.save(os.path.join(datapath, f"{session_id}_mean_waveforms.npy"), mn)
+    np.save(os.path.join(datapath, f"{session_id}_stddev_waveforms.npy"), sd)
+    np.save(os.path.join(datapath, f"{session_id}_spike_counts.npy"), cnts)
 
 
 def extract_waveforms(
@@ -325,7 +327,7 @@ def load_kilosort_data(folder,
         "channel_pos": channel_pos,
         "cluster_ids": cluster_ids,
         "cluster_quality": cluster_quality,
-        "cluster_amplitude": cluster_amplitude,
+        # "cluster_amplitude": cluster_amplitude,
     }
 
     if include_pcs:
@@ -439,7 +441,8 @@ def read_cluster_amplitude_tsv(filename):
 
 if __name__ == "__main__":
 
-    jobid = int(os.environ['SLURM_ARRAY_TASK_ID'])
-    logging.info(f"STARTING JOB: {jobid}")
-    run_session(jobid - 1)
+    ROOTPATH = "/mnt/home/awilliams/ceph/isabel"
+    for jobid in range(4):
+        logging.info(f"STARTING JOB: {jobid}")
+        run_session(ROOTPATH, jobid)
 
